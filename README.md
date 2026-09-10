@@ -29,6 +29,31 @@ npm test          # 35 vitest tests: parsers, compliance, risk, AI contract,
                   # approval→reuse loop, remediation
 ```
 
+## Deployment
+
+### Vercel (recommended — frontend + API on the same origin)
+The repo ships a Vercel Function (`api/index.ts`) that serves the Express API at
+`/api/*` on the same domain as the Vite frontend, so the demo accounts and every
+role-protected route work after a single deploy.
+
+1. Push to GitHub and import the repo into Vercel ("Other" framework).
+2. `vercel.json` already sets `rootDirectory`, build, output and rewrites —
+   do not change them.
+3. Project Settings → Environment Variables → add `AUTH_SECRET` (long random
+   value) for Production.
+4. Deploy. Sign in with `reviewer@nexus-comply.sih` / `demo-reviewer` or
+   `analyst@nexus-comply.sih` / `demo-analyst` on the deployed URL. No
+   `VITE_API_URL` is needed (same-origin `/api`).
+
+### Static hosts only (GitHub Pages / Netlify / nginx)
+Static hosts cannot run the Express API. Host the backend separately (Render,
+Railway, Fly.io, VPS via `npm run dev:api`), then give the frontend build the
+backend origin. On GitHub Pages set the repo **variable** `VITE_API_URL`, e.g.
+`https://nexus-api.example.com` (the workflow passes it as a build-time env).
+
+Local development needs no configuration: the Vite dev server proxies `/api`
+to `http://localhost:4000` (`vite.config.ts`).
+
 ## Layout
 ```
 apps/api          Express REST API (audit pipeline, AI approval, reports)

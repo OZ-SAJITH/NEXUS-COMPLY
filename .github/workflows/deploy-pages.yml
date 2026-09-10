@@ -34,9 +34,21 @@ jobs:
         run: npm run build --workspace=apps/web
         env:
           GH_PAGES: "true"
+          # Required for auth to work on GitHub Pages: GitHub Pages is a static
+          # host only (POST /api/* -> 405). Point the build at a hosted backend.
+          # Set the repo variable VITE_API_URL to e.g. https://nexus-api.example.com
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
 
-      - name: Verify production build output exists
-        run: test -f apps/web/dist/index.html
+      - name: Verify production build output
+        run: |
+          test -f apps/web/dist/index.html
+          test -f apps/web/dist/404.html
+
+      # The Pages artifact must contain the CONTENTS of apps/web/dist at its
+      # ROOT: index.html, assets/, *.png ... (NOT apps/web/dist/... nested).
+      # This listing is the proof.
+      - name: List artifact payload (root = dist contents)
+        run: find apps/web/dist -maxdepth 2 | sort
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -56,3 +68,11 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Report expected site URL
+        run: |
+          echo "Expected site URL:"
+          echo "https://OZ-SAJITH.github.io/NEXUS-COMPLY/"
+          echo "If the URL still shows 'There isn't a GitHub Pages site here'"
+          echo "after a green run, enable Pages at:"
+          echo "Repo Settings -> Pages -> Build and deployment -> Source: GitHub Actions"

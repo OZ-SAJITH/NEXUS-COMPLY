@@ -12,7 +12,14 @@ import type {
 } from "@nexus/shared-types";
 import { sessionToken } from "../session";
 
-const BASE = import.meta.env.VITE_API_URL ?? "/api";
+// API base URL resolution:
+//   - VITE_API_URL (e.g. "https://api.example.com") when set — production
+//     deployments hosted separately from the frontend.
+//   - Otherwise "/api" (same origin) — used by the Vite dev proxy locally and
+//     by the Vercel serverless Function on the same origin in production.
+// A trailing slash is stripped so `${BASE}${path}` never forms "//auth".
+const configuredBase = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+const BASE = configuredBase ? configuredBase.replace(/\/+$/, "") : "/api";
 
 export class ApiRequestError extends Error {
   status: number;
@@ -37,7 +44,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!res.ok) {
-    const message = body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : `${res.status} ${text.slice(0, 200)}`;
+    const looksLikeHtml = /^\s*</.test(text);
+    const message =
+      body && typeof body === "object" && "error" in body
+        ? String((body as { error: unknown }).error)
+        : looksLikeHtml && (res.status === 404 || res.status === 405)
+          ? `API backend is not reachable at ${BASE}. This deployment serves static files only — set VITE_API_URL to a hosted backend, or use the Vercel deployment where /api runs serverless on the same origin.`
+          : `${res.status} ${text.slice(0, 200)}`;
     throw new ApiRequestError(res.status, message);
   }
   return body as T;

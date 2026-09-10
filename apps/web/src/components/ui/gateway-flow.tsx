@@ -139,7 +139,6 @@ const gatewayFlowSource = `<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nexus Gateway</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
@@ -499,6 +498,24 @@ ${definition.focusCss ?? ""}
     Object.keys(next).forEach(function (key) { controls[key] = next[key]; });
     applyVisual();
   });
+  window.addEventListener('message', function (event) {
+    if (!event.data || event.data.type !== 'nexus-tailwind-css') return;
+    var payload = event.data.css || {};
+    var existing = document.getElementById('nexus-tailwind-css');
+    if (existing) existing.remove();
+    var tag = null;
+    if (payload.href) {
+      tag = document.createElement('link');
+      tag.rel = 'stylesheet';
+      tag.href = payload.href;
+    } else if (payload.text) {
+      tag = document.createElement('style');
+      tag.textContent = payload.text;
+    }
+    if (!tag) return;
+    tag.id = 'nexus-tailwind-css';
+    document.head.appendChild(tag);
+  });
   window.__SF_APPLY_CONTROLS = applyVisual;
 })();
 </script>`;
@@ -538,6 +555,21 @@ ${definition.focusCss ?? ""}
   return patchedSource
     .replace(/<head([^>]*)>/i, `<head$1>${controlScript}${focusStyle}`)
     .replace(/<\/body>/i, `${focusScript}</body>`);
+}
+
+function collectAppCss(): { href?: string; text?: string } {
+  if (typeof document === "undefined") return {};
+  const links = Array.from(
+    document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+  );
+  const sameOrigin = links.find(
+    (link) => new URL(link.href, window.location.href).origin === window.location.origin,
+  );
+  if (sameOrigin) return { href: sameOrigin.href };
+  const text = Array.from(document.querySelectorAll<HTMLStyleElement>("style"))
+    .map((style) => style.textContent ?? "")
+    .join("\n");
+  return text ? { text } : {};
 }
 
 function GatewayFlowFrame({
@@ -630,6 +662,19 @@ function GatewayFlowFrame({
     safeStrokeWidth,
     source,
   ]);
+
+  useEffect(() => {
+    const frame = iframeRef.current;
+    if (!frame) return;
+    const send = () => {
+      const css = collectAppCss();
+      if (!css.href && !css.text) return;
+      frame.contentWindow?.postMessage({ type: "nexus-tailwind-css", css }, "*");
+    };
+    send();
+    frame.addEventListener("load", send);
+    return () => frame.removeEventListener("load", send);
+  }, [source, resolvedMode]);
 
   const filter =
     safeHue === 0 && safeSaturation === 1 && safeBrightness === 1

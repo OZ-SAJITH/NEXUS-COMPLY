@@ -126,7 +126,6 @@ describe("Human-in-the-loop: lifecycle transitions", () => {
   });
 
   it("request-changes -> CHANGES_REQUESTED, reopen -> PENDING_REVIEW", async () => {
-    const repo = getRepository();
     const { reviewer } = await reviewers();
     const { finding } = await newAudit();
 

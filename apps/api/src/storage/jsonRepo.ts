@@ -12,7 +12,7 @@ import type {
 } from "@nexus/shared-types";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = process.env.DATA_DIR ?? join(__dirname, "../../../../data");
+const DEFAULT_DATA_DIR = join(__dirname, "../../../../data");
 
 export interface DbShape {
   configurations: ConfigurationRecord[];
@@ -33,7 +33,7 @@ export class JsonRepository {
   private file: string;
   private cache: DbShape | null = null;
 
-  constructor(dataDir: string = DATA_DIR) {
+  constructor(dataDir: string = process.env.DATA_DIR ?? DEFAULT_DATA_DIR) {
     this.file = join(dataDir, "db.json");
   }
 
