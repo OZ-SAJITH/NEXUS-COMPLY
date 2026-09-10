@@ -34,10 +34,11 @@ jobs:
         run: npm run build --workspace=apps/web
         env:
           GH_PAGES: "true"
-          # GitHub Pages is a static host only (no backend, POST /api/* -> 405).
-          # If you host the API separately, set the repo variable VITE_API_URL
-          # to its origin, e.g. https://nexus-api.example.com
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          # GitHub Pages is static only (no Express/FastAPI can run there), so
+          # the build always runs the in-browser demo API. Demo mode is also
+          # forced at runtime whenever the page is served from *.github.io,
+          # regardless of any VITE_API_URL value in this environment.
+          VITE_DEMO_MODE: "true"
 
       - name: Verify production build output
         run: |

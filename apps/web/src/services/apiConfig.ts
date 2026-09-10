@@ -2,11 +2,19 @@ export class ApiConfigurationError extends Error {
   constructor(message?: string) {
     super(
       message ??
-        "This deployment has no API backend configured. Repository variable VITE_API_URL must point at the hosted NEXUS-COMPLY API (e.g. https://nexus-api.example.com), then redeploy the Pages workflow."
+        "No API backend is configured. On GitHub Pages the app runs in demo mode (in-browser engine) and never requires VITE_API_URL."
     );
     this.name = "ApiConfigurationError";
   }
 }
+
+/**
+ * GitHub Pages is static only and the NEXUS-COMPLY demo must never call /api
+ * there. Detecting the host at runtime guarantees demo mode even if a
+ * VITE_API_URL repository variable is set (it would otherwise disable it).
+ */
+export const RUNS_ON_GITHUB_PAGES =
+  typeof window !== "undefined" && window.location.hostname.toLowerCase().endsWith("github.io");
 
 import { demoResponse } from "./demoApi";
 
@@ -22,9 +30,11 @@ export const API_BASE: string | null = configured
  * DEMO_MODE: when the frontend runs on static hosting (e.g. GitHub Pages)
  * without a separately hosted API, all API calls are served by an in-browser
  * demo engine that mirrors the Express backend (same endpoints, same types,
- * persistable state). Enable explicitly with the VITE_DEMO_MODE=true variable.
+ * persistable state). It is forced on for GitHub Pages at runtime, and may be
+ * enabled explicitly with the VITE_DEMO_MODE=true variable when the API_BASE
+ * fallback heuristic does not apply (e.g. local preview of the static build).
  */
-export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true" || API_BASE === null;
+export const DEMO_MODE = RUNS_ON_GITHUB_PAGES || import.meta.env.VITE_DEMO_MODE === "true" || API_BASE === null;
 
 export function apiEndpoint(path: string): string {
   const base = API_BASE;
