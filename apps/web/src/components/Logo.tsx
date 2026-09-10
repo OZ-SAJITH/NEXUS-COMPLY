@@ -1,4 +1,4 @@
-export const LOGO_URL = "/nexus-comply-logo.png";
+export const LOGO_URL = `${import.meta.env.BASE_URL}nexus-comply-logo.png`;
 export const LOGO_RATIO = 408 / 336;
 
 export function LogoMark({ size = 36, className }: { size?: number; className?: string }) {
