@@ -10,7 +10,6 @@ import type {
   ReviewQueueParams,
   ReviewQueueResponse,
 } from "@nexus/shared-types";
-import { sessionToken } from "../session";
 
 // API base URL resolution:
 //   - VITE_API_URL (e.g. "https://api.example.com") when set — production
@@ -30,9 +29,7 @@ export class ApiRequestError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = sessionToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${BASE}${path}`, { headers, ...init });
   const text = await res.text().catch(() => "");
   let body: unknown = null;
@@ -66,12 +63,6 @@ export interface AuditApiOverrides {
 }
 
 export const api = {
-  login: (email: string, password: string) =>
-    request<{ token: string; user: { id: string; email: string; displayName: string; role: "analyst" | "reviewer" } }>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
-
   getDashboard: () => request<DashboardStats>("/dashboard"),
 
   createAudit: (name: string, content: string, aiOverrides?: AuditApiOverrides[]) =>

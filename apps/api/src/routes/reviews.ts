@@ -11,15 +11,7 @@ import {
   reopenFinding,
   requestChanges,
 } from "../services/reviewService";
-import {
-  verifyPassword,
-  signToken,
-  optionalAuth,
-  requireAuth,
-  requireReviewer,
-  toPublicUser,
-  type AuthUser,
-} from "../services/auth";
+import { SYSTEM_REVIEWER } from "../services/auth";
 import { handleError } from "./helpers";
 
 export const reviewsRouter = Router();
@@ -32,41 +24,10 @@ function ah(handler: Handler) {
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/auth/login
-// ---------------------------------------------------------------------------
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
-
-reviewsRouter.post(
-  "/auth/login",
-  ah(async (req, res) => {
-    const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) return handleError(res, "Enter a valid email and password.");
-    const repo = getRepository();
-    const user = await repo.getUserByEmail(parsed.data.email);
-    if (!user || !verifyPassword(parsed.data.password, user.passwordHash, user.passwordSalt)) {
-      return handleError(res, "Invalid email or password.", 401);
-    }
-    const token = signToken(user);
-    res.json({ token, user: toPublicUser(user) });
-  })
-);
-
-// ---------------------------------------------------------------------------
-// GET /api/auth/me
-// ---------------------------------------------------------------------------
-reviewsRouter.get("/auth/me", requireAuth, (_req, res) => {
-  res.json({ user: _req.user });
-});
-
-// ---------------------------------------------------------------------------
 // GET /api/reviews — Human Review Queue
 // ---------------------------------------------------------------------------
 reviewsRouter.get(
   "/reviews",
-  optionalAuth,
   ah(async (req, res) => {
     const { vendor, framework, severity, status, reviewer, sortBy, search } = req.query;
     const queue = await listReviewQueue({
@@ -87,9 +48,8 @@ reviewsRouter.get(
 // ---------------------------------------------------------------------------
 reviewsRouter.get(
   "/findings/:id/review",
-  optionalAuth,
   ah(async (req, res) => {
-    const viewer = req.user ?? null;
+    const viewer = req.user ?? SYSTEM_REVIEWER;
     const detail = await getReviewDetail(req.params.id, viewer);
     res.json(detail);
   })
@@ -100,7 +60,6 @@ reviewsRouter.get(
 // ---------------------------------------------------------------------------
 reviewsRouter.get(
   "/findings/:id/audit-trail",
-  optionalAuth,
   ah(async (req, res) => {
     const repo = getRepository();
     const items = await repo.auditEventsForFinding(req.params.id);
@@ -115,11 +74,10 @@ const commentSchema = z.object({ comment: z.string().trim().max(2000).optional()
 
 reviewsRouter.post(
   "/findings/:id/approve",
-  requireReviewer,
   ah(async (req, res) => {
     const parsed = commentSchema.safeParse(req.body ?? {});
     if (!parsed.success) return handleError(res, "Invalid approval request.");
-    const review = await approveFinding(req.params.id, req.user as AuthUser, parsed.data.comment);
+    const review = await approveFinding(req.params.id, SYSTEM_REVIEWER, parsed.data.comment);
     res.json({ review, message: "Finding approved. The human decision is recorded in the audit trail." });
   })
 );
@@ -131,11 +89,10 @@ const rejectSchema = z.object({ reason: z.string().trim().min(1, "A rejection re
 
 reviewsRouter.post(
   "/findings/:id/reject",
-  requireReviewer,
   ah(async (req, res) => {
     const parsed = rejectSchema.safeParse(req.body ?? {});
     if (!parsed.success) return handleError(res, parsed.error.issues[0]?.message ?? "A rejection reason is required.");
-    const review = await rejectFinding(req.params.id, req.user as AuthUser, parsed.data.reason);
+    const review = await rejectFinding(req.params.id, SYSTEM_REVIEWER, parsed.data.reason);
     res.json({ review });
   })
 );
@@ -147,11 +104,10 @@ const requestSchema = z.object({ requestedChanges: z.string().trim().min(1, "Des
 
 reviewsRouter.post(
   "/findings/:id/request-changes",
-  requireReviewer,
   ah(async (req, res) => {
     const parsed = requestSchema.safeParse(req.body ?? {});
     if (!parsed.success) return handleError(res, parsed.error.issues[0]?.message ?? "Describe what needs to change.");
-    const review = await requestChanges(req.params.id, req.user as AuthUser, parsed.data.requestedChanges);
+    const review = await requestChanges(req.params.id, SYSTEM_REVIEWER, parsed.data.requestedChanges);
     res.json({ review });
   })
 );
@@ -168,11 +124,10 @@ const modifySchema = z.object({
 
 reviewsRouter.post(
   "/findings/:id/modify",
-  requireReviewer,
   ah(async (req, res) => {
     const parsed = modifySchema.safeParse(req.body ?? {});
     if (!parsed.success) return handleError(res, "Invalid modification request.");
-    const review = await modifyFinding(req.params.id, req.user as AuthUser, parsed.data);
+    const review = await modifyFinding(req.params.id, SYSTEM_REVIEWER, parsed.data);
     res.json({ review });
   })
 );
@@ -182,9 +137,8 @@ reviewsRouter.post(
 // ---------------------------------------------------------------------------
 reviewsRouter.post(
   "/findings/:id/reopen",
-  requireReviewer,
   ah(async (req, res) => {
-    const review = await reopenFinding(req.params.id, req.user as AuthUser);
+    const review = await reopenFinding(req.params.id, SYSTEM_REVIEWER);
     res.json({ review });
   })
 );
@@ -199,11 +153,10 @@ const finalizeSchema = z.object({
 
 reviewsRouter.post(
   "/compliance/:id/finalize",
-  requireReviewer,
   ah(async (req, res) => {
     const parsed = finalizeSchema.safeParse(req.body ?? {});
     if (!parsed.success) return handleError(res, "Invalid finalization request.");
-    const finalization = await finalizeAudit(req.params.id, req.user as AuthUser, parsed.data);
+    const finalization = await finalizeAudit(req.params.id, SYSTEM_REVIEWER, parsed.data);
     res.json({ finalization });
   })
 );

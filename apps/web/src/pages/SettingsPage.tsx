@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Cpu, Lock, Database, Activity, LogOut } from "lucide-react";
+import { Cpu, Lock, Database, Activity } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Logo } from "../components/Logo";
 import { useAiMode } from "../hooks/useAiMode";
-import { currentUser, signOut } from "../session";
+import { currentUser } from "../session";
 import { api } from "../services/api";
 
 export default function SettingsPage() {
@@ -30,18 +30,15 @@ export default function SettingsPage() {
       <div className="space-y-4">
         <div className="card !p-5 row-in">
           <h2 className="text-base font-semibold text-slate-100 mb-1">Profile</h2>
-          <p className="text-xs text-slate-500 mb-4">The demo workspace signs you in as a Security Analyst (view-role).</p>
+          <p className="text-xs text-slate-500 mb-4">No sign-in required — the workspace runs as the Security Review Lead.</p>
           <div className="flex items-center gap-3">
             <span className="w-11 h-11 rounded-full bg-gradient-to-br from-accent to-accent-dim text-slate-950 flex items-center justify-center text-sm font-bold">
               {user.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
             </span>
             <div className="flex-1">
               <div className="text-sm font-semibold text-slate-100">{user}</div>
-              <div className="text-xs text-slate-500">Security Analyst · Workspace: SIH-2026-DEMO</div>
+              <div className="text-xs text-slate-500">Security Review Lead · Workspace: SIH-2026-DEMO</div>
             </div>
-            <button className="btn-outline !px-3 !py-2 text-xs" onClick={() => signOut()}>
-              <LogOut className="w-3.5 h-3.5" aria-hidden="true" /> Sign out
-            </button>
           </div>
         </div>
 

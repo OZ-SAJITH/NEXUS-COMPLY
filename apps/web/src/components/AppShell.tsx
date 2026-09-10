@@ -24,7 +24,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   X,
-  LogOut,
   type LucideIcon,
 } from "lucide-react";
 import { AnimatedNexusLogo, type NexusLogoState } from "./motion/AnimatedNexusLogo";
@@ -32,7 +31,7 @@ import { LoadingScreen } from "./LoadingScreen";
 import { BackgroundFx } from "./motion/BackgroundFx";
 import { cn } from "../utils/cn";
 import { useAiMode } from "../hooks/useAiMode";
-import { currentUser, signOut, sessionRole } from "../session";
+import { currentUser, sessionRole } from "../session";
 import { api } from "../services/api";
 import { timeAgo } from "../utils/cn";
 import type { AuditRecord, DashboardStats } from "../types";
@@ -458,15 +457,6 @@ export default function AppShell() {
             <div className="absolute z-50 right-0 bottom-full mb-1 w-48 rounded-lg border border-surface-600 bg-surface-900 shadow-lift py-1">
               <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-surface-800" onClick={() => navigate("/app/settings")}>
                 <Settings className="w-3.5 h-3.5" aria-hidden="true" /> Workspace settings
-              </button>
-              <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-surface-800"
-                onClick={() => {
-                  signOut();
-                  navigate("/login");
-                }}
-              >
-                <LogOut className="w-3.5 h-3.5" aria-hidden="true" /> Sign out
               </button>
             </div>
           ) : null}

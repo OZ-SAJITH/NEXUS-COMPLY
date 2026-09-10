@@ -3,12 +3,17 @@ import express from "express";
 import cors from "cors";
 import { apiRouter } from "./routes";
 import { ApiError } from "./services/reviewService";
+import { attachSystemUser } from "./services/auth";
 
 export function createApp(): express.Express {
   const app = express();
 
   app.use(cors());
   app.use(express.json({ limit: "10mb" }));
+
+  // No authentication: every request acts as the built-in system reviewer so
+  // review decisions and audit-trail entries are always recorded.
+  app.use("/api", attachSystemUser);
 
   app.use("/api", apiRouter);
 

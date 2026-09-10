@@ -1,9 +1,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import AppShell from "./components/AppShell";
-import { RequireSession } from "./components/RequireSession";
 import LandingPage from "./pages/LandingPage";
-import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import AuditPage from "./pages/AuditPage";
 import AuditResultPage from "./pages/AuditResultPage";
@@ -36,16 +34,9 @@ export default function App() {
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={<Navigate to="/app" replace />} />
 
-        <Route
-          path="/app"
-          element={
-            <RequireSession>
-              <AppShell />
-            </RequireSession>
-          }
-        >
+        <Route path="/app" element={<AppShell />}>
           <Route index element={<DashboardPage />} />
           <Route path="reviews" element={<ReviewsPage />} />
           <Route path="audits/new" element={<AuditPage />} />

@@ -70,7 +70,7 @@ export default function LandingPage() {
             <a href="#explain" className="hover:text-slate-100 transition-colors">Explainable AI</a>
           </nav>
           <div className="flex items-center gap-2">
-            <Link to="/login" className="btn-ghost !px-3 !py-2 text-sm">Sign in</Link>
+            <Link to="/app" className="btn-ghost !px-3 !py-2 text-sm">Open workspace</Link>
             <Link to="/app/audits/new" className="btn-primary !px-3 !py-2 text-sm hidden sm:inline-flex">
               Start Security Audit
             </Link>
@@ -231,7 +231,7 @@ export default function LandingPage() {
           <p className="mt-3 text-sm text-slate-400">Run your first audit in under a minute — no credentials, no setup.</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link to="/app/audits/new" className="btn-primary !px-6 !py-2.5">Start Security Audit</Link>
-            <Link to="/login" className="btn-outline !px-6 !py-2.5">Open the workspace</Link>
+            <Link to="/app" className="btn-outline !px-6 !py-2.5">Open the workspace</Link>
           </div>
         </div>
       </section>

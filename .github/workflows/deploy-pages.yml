@@ -34,9 +34,9 @@ jobs:
         run: npm run build --workspace=apps/web
         env:
           GH_PAGES: "true"
-          # Required for auth to work on GitHub Pages: GitHub Pages is a static
-          # host only (POST /api/* -> 405). Point the build at a hosted backend.
-          # Set the repo variable VITE_API_URL to e.g. https://nexus-api.example.com
+          # GitHub Pages is a static host only (no backend, POST /api/* -> 405).
+          # If you host the API separately, set the repo variable VITE_API_URL
+          # to its origin, e.g. https://nexus-api.example.com
           VITE_API_URL: ${{ vars.VITE_API_URL }}
 
       - name: Verify production build output

@@ -4,7 +4,7 @@ import { resolve } from "path";
 import type { Server } from "http";
 import { runAudit } from "../src/services/auditService";
 import { getRepository } from "../src/storage/jsonRepo";
-import { ensureDemoUsers, toPublicUser } from "../src/services/auth";
+import { SYSTEM_REVIEWER } from "../src/services/auth";
 import {
   approveFinding,
   rejectFinding,
@@ -24,11 +24,7 @@ import { createApp } from "../src/app";
 const ciscoInsecure = () => readFileSync(resolve(__dirname, "../../../samples/cisco/demo-insecure.conf"), "utf-8");
 
 async function reviewers() {
-  const repo = getRepository();
-  const reviewer = await repo.getUserByEmail("reviewer@nexus-comply.sih");
-  const analyst = await repo.getUserByEmail("analyst@nexus-comply.sih");
-  if (!reviewer || !analyst) throw new Error("demo users missing");
-  return { reviewer: toPublicUser(reviewer), analyst: toPublicUser(analyst) };
+  return { reviewer: SYSTEM_REVIEWER, analyst: SYSTEM_REVIEWER };
 }
 
 async function newAudit() {
@@ -47,22 +43,12 @@ async function http(): Promise<{ base: string }> {
   return { base: `http://localhost:${port}/api` };
 }
 
-async function login(base: string, email: string, password: string) {
-  const res = await fetch(`${base}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  return res;
-}
-
 function eventTypes(repo = getRepository()) {
   return async (findingId: string) => (await repo.auditEventsForFinding(findingId)).map((e) => e.eventType);
 }
 
 beforeEach(async () => {
   await getRepository().reset();
-  await ensureDemoUsers();
 });
 
 describe("Human-in-the-loop: registration", () => {
@@ -258,54 +244,30 @@ describe("Human-in-the-loop: finalization & audit seal", () => {
   });
 });
 
-describe("Human-in-the-loop: HTTP + RBAC", () => {
-  it("login returns a bearer token and public user; invalid credentials yield 401", async () => {
+describe("Human-in-the-loop: HTTP", () => {
+  it("no longer exposes an auth endpoint", async () => {
     const { base } = await http();
-    const ok = await login(base, "reviewer@nexus-comply.sih", "demo-reviewer");
-    expect(ok.status).toBe(200);
-    const body = (await ok.json()) as { token: string; user: { role: string; displayName: string } };
-    expect(body.token.length).toBeGreaterThan(20);
-    expect(body.user.role).toBe("reviewer");
-    expect(body.user.displayName).toBe("Security Review Lead");
-
-    const bad = await login(base, "reviewer@nexus-comply.sih", "wrong-password");
-    expect(bad.status).toBe(401);
+    const res = await fetch(`${base}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "a@a.a", password: "x" }),
+    });
+    expect(res.status).toBe(404);
   });
 
-  it("anonymous and analyst requests are rejected; reviewer can approve", async () => {
+  it("approve succeeds without any credentials and records the system reviewer", async () => {
     const { base } = await http();
     const { finding } = await newAudit();
-
-    const reviewRes = await fetch(`${base}/findings/${finding.id}/review`);
-    expect(reviewRes.status).toBe(200);
 
     const anonymousApprove = await fetch(`${base}/findings/${finding.id}/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comment: "ok" }),
-    });
-    expect(anonymousApprove.status).toBe(401);
-
-    const analystLogin = await login(base, "analyst@nexus-comply.sih", "demo-analyst");
-    const analystToken = ((await analystLogin.json()) as { token: string }).token;
-    const analystApprove = await fetch(`${base}/findings/${finding.id}/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${analystToken}` },
-      body: JSON.stringify({ comment: "ok" }),
-    });
-    expect(analystApprove.status).toBe(403);
-
-    const reviewerLogin = await login(base, "reviewer@nexus-comply.sih", "demo-reviewer");
-    const reviewerToken = ((await reviewerLogin.json()) as { token: string }).token;
-    const reviewerApprove = await fetch(`${base}/findings/${finding.id}/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${reviewerToken}` },
       body: JSON.stringify({ comment: "Approved via HTTP." }),
     });
-    expect(reviewerApprove.status).toBe(200);
-    const body = (await reviewerApprove.json()) as { review: { status: string; reviewedBy: string } };
+    expect(anonymousApprove.status).toBe(200);
+    const body = (await anonymousApprove.json()) as { review: { status: string; reviewedBy: string } };
     expect(body.review.status).toBe("APPROVED");
-    expect(body.review.reviewedBy).toBe("Security Review Lead");
+    expect(body.review.reviewedBy).toBe(SYSTEM_REVIEWER.displayName);
   });
 });
 

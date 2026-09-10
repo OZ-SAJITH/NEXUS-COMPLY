@@ -3,20 +3,19 @@
  *
  * Hosts the Express API at /api/* on the SAME origin as the Vite frontend.
  * Previously the SPA catch-all rewrite in vercel.json sent every POST —
- * including /api/auth/login — to index.html, and static hosts reject POSTs
- * with 405 Not Allowed. Routing /api/* to this Function fixes that.
+ * including /api/* — to index.html, and static hosts reject POSTs with 405.
+ * Routing /api/* to this Function fixes that.
  */
 import "dotenv/config";
 import { createApp } from "../apps/api/src/app";
 import { seedIfEmpty } from "../apps/api/src/services/seed";
-import { ensureDemoUsers } from "../apps/api/src/services/auth";
 import { backfillReviewData } from "../apps/api/src/services/reviewService";
 import express from "express";
 
 // Vercel serverless filesystems are read-only except /tmp. The JSON storage
 // backend writes data/db.json; jsonRepo re-reads DATA_DIR when each repository
 // instance is constructed (at request time, after this body has run), so the
-// seeded demo audits and the demo login accounts materialize under /tmp.
+// seeded demo audits materialize under /tmp.
 if (process.env.VERCEL && !process.env.DATA_DIR) {
   process.env.DATA_DIR = "/tmp/nexus-data";
 }
@@ -29,7 +28,6 @@ function warmup(): Promise<void> {
   warming ??= (async () => {
     try {
       await seedIfEmpty();
-      await ensureDemoUsers();
       await backfillReviewData();
     } catch (err) {
       console.error("[vercel] warmup failed", err);
@@ -53,8 +51,8 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Guarantee demo identities + seeded data exist before the inner app routes,
-// so /api/auth/login always finds its users even on a cold Function instance.
+// Guarantee seeded data exists before the inner app routes, so the dashboard
+// and demo flow work even on a cold Function instance.
 app.use((_req, _res, next) => {
   warmup()
     .then(() => next())
