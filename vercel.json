@@ -1,0 +1,7 @@
+{
+  "rootDirectory": ".",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build --workspace=apps/web",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
