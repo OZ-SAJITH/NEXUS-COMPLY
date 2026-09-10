@@ -21,13 +21,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node (monorepo root)
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies (workspace root)
+      - name: Install dependencies from the workspace root
         run: npm ci
 
       - name: Build apps/web for GitHub Pages
@@ -35,10 +35,13 @@ jobs:
         env:
           GH_PAGES: "true"
 
+      - name: Verify production build output exists
+        run: test -f apps/web/dist/index.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload artifact
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: apps/web/dist
