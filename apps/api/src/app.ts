@@ -8,7 +8,26 @@ import { attachSystemUser } from "./services/auth";
 export function createApp(): express.Express {
   const app = express();
 
-  app.use(cors());
+  const allowedOrigins = (
+    process.env.CORS_ORIGINS ??
+    "http://localhost:5173,http://127.0.0.1:5173,https://OZ-SAJITH.github.io"
+  )
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  app.use(
+    cors({
+      origin(origin, cb) {
+        if (!origin || allowedOrigins.includes(origin)) {
+          return cb(null, true);
+        }
+        return cb(null, false);
+      },
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    })
+  );
   app.use(express.json({ limit: "10mb" }));
 
   // No authentication: every request acts as the built-in system reviewer so

@@ -11,14 +11,8 @@ import type {
   ReviewQueueResponse,
 } from "@nexus/shared-types";
 
-// API base URL resolution:
-//   - VITE_API_URL (e.g. "https://api.example.com") when set — production
-//     deployments hosted separately from the frontend.
-//   - Otherwise "/api" (same origin) — used by the Vite dev proxy locally and
-//     by the Vercel serverless Function on the same origin in production.
-// A trailing slash is stripped so `${BASE}${path}` never forms "//auth".
-const configuredBase = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
-const BASE = configuredBase ? configuredBase.replace(/\/+$/, "") : "/api";
+import { DEMO_MODE, API_BASE, ApiConfigurationError, apiEndpoint } from "./apiConfig";
+import { dispatchDemo, demoReportUrl } from "./demoApi";
 
 export class ApiRequestError extends Error {
   status: number;
@@ -29,8 +23,25 @@ export class ApiRequestError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (DEMO_MODE) {
+    try {
+      return dispatchDemo<T>(path, init).body;
+    } catch (err) {
+      if (err instanceof ApiRequestError) throw err;
+      throw new ApiRequestError((err as { status?: number })?.status ?? 500, (err as { message?: string })?.message ?? "Demo engine error");
+    }
+  }
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const res = await fetch(`${BASE}${path}`, { headers, ...init });
+  const url = apiEndpoint(path);
+  let res: Response;
+  try {
+    res = await fetch(url, { headers, ...init });
+  } catch {
+    throw new ApiRequestError(
+      0,
+      "Backend unavailable — the NEXUS-COMPLY engine did not respond. Check that the hosted API is running and reachable, then retry."
+    );
+  }
   const text = await res.text().catch(() => "");
   let body: unknown = null;
   if (text) {
@@ -46,11 +57,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       body && typeof body === "object" && "error" in body
         ? String((body as { error: unknown }).error)
         : looksLikeHtml && (res.status === 404 || res.status === 405)
-          ? `API backend is not reachable at ${BASE}. This deployment serves static files only — set VITE_API_URL to a hosted backend, or use the Vercel deployment where /api runs serverless on the same origin.`
+          ? `API backend is not reachable at ${url}. This deployment serves static files only — set the VITE_API_URL repository variable to your hosted backend, then redeploy.`
           : `${res.status} ${text.slice(0, 200)}`;
     throw new ApiRequestError(res.status, message);
   }
   return body as T;
+}
+
+export function describeApiError(err: unknown): { title: string; detail: string } {
+  if (err instanceof ApiConfigurationError) {
+    return {
+      title: "API configuration required",
+      detail: err.message,
+    };
+  }
+  if (err instanceof ApiRequestError && err.status === 0) {
+    return {
+      title: "Backend unavailable",
+      detail: "Could not reach the NEXUS-COMPLY engine. Check that the hosted API backend is deployed and reachable, then retry.",
+    };
+  }
+  return { title: "Could not reach the NEXUS-COMPLY engine", detail: err instanceof Error ? err.message : String(err) };
 }
 
 export interface AuditApiOverrides {
@@ -158,5 +185,5 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  reportUrl: (auditId: string) => `${BASE}/reports/${auditId}`,
+  reportUrl: (auditId: string) => (DEMO_MODE ? demoReportUrl(auditId) : API_BASE ? `${API_BASE}/reports/${auditId}` : "#"),
 };

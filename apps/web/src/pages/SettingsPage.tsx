@@ -6,6 +6,7 @@ import { Logo } from "../components/Logo";
 import { useAiMode } from "../hooks/useAiMode";
 import { currentUser } from "../session";
 import { api } from "../services/api";
+import { API_BASE, fetchApi } from "../services/apiConfig";
 
 export default function SettingsPage() {
   const { mode, checked } = useAiMode();
@@ -16,7 +17,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const t0 = performance.now();
     const done = (ok: boolean) => setHealth({ ok, latency: Math.round(performance.now() - t0) });
-    fetch(`${import.meta.env.VITE_API_URL ?? "/api"}/health`).then((r) => done(r.ok)).catch(() => done(false));
+    fetchApi(`${API_BASE ?? "/api"}/health`).then((r) => done(r.ok)).catch(() => done(false));
     api
       .listAudits()
       .then((a) => setDb({ audits: a.length, approxBytes: JSON.stringify(a).length }))

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { FileText, ArrowRight, ScanSearch, Gauge, ClipboardCheck, ShieldCheck } from "lucide-react";
 import type { AuditRecord, ExposurePath, RemediationSimulation } from "../types";
 import { api } from "../services/api";
+import { fetchApi } from "../services/apiConfig";
 import { Card, SeverityBadge, StatusBadge, Stat, Progress, SectionTitle } from "../components/ui";
 import { RiskGauge } from "../components/RiskGauge";
 import { ConfigViewer } from "../components/ConfigViewer";
@@ -53,7 +54,7 @@ export default function AuditResultPage() {
       setAudit(a);
       setSelectedFindingId((prev) => prev ?? a.findings.find((f) => f.status === "FAIL")?.id ?? null);
 
-      const cfgs = await fetch(`${import.meta.env.VITE_API_URL ?? "/api"}/configurations`).then((r) => r.json());
+      const cfgs = await fetchApi("/configurations").then((r) => r.json());
       const cfg = (cfgs as Array<{ id: string; content: string }>).find((c) => c.id === a.configurationId);
       if (cfg) setConfigContent(cfg.content);
 

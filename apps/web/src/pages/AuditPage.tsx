@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Upload, ClipboardPaste, ChevronLeft, ChevronRight, ShieldCheck, ArrowRight } from "lucide-react";
 import { api } from "../services/api";
+import { fetchApi } from "../services/apiConfig";
 import { PageHeader } from "../components/PageHeader";
 import { AuditTimeline, type TimelineStage } from "../components/AuditTimeline";
 import { SeverityBadge } from "../components/SeverityBadge";
@@ -153,7 +154,7 @@ export default function AuditPage() {
 
     // real AI analysis (vendor detection / intent extraction)
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL ?? "/api"}/ai/interpret`, {
+      const res = await fetchApi("/ai/interpret", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ configName: fileName, config: content }),

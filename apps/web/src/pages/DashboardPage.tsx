@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ShieldCheck, AlertOctagon, FileWarning, Boxes, RefreshCw, Download, Plus, ClipboardCheck, ScanSearch, Gauge as GaugeIcon } from "lucide-react";
 import type { AuditRecord, DashboardStats } from "@nexus/shared-types";
-import { api } from "../services/api";
+import { api, describeApiError } from "../services/api";
 import { PageHeader } from "../components/PageHeader";
 import { MetricCard } from "../components/MetricCard";
 import { ComplianceRing, ComplianceBar } from "../components/ComplianceRing";
@@ -48,7 +48,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [audits, setAudits] = useState<AuditRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<unknown>(null);
   const navigate = useNavigate();
   const auditById = useMemo(() => new Map(audits.map((a) => [a.id, a])), [audits]);
 
@@ -60,7 +60,7 @@ export default function DashboardPage() {
         setStats(d);
         setAudits(a);
       })
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -114,7 +114,8 @@ export default function DashboardPage() {
   }
 
   if (error && !stats) {
-    return <ErrorState title="Could not reach the NEXUS-COMPLY engine" detail={error} onRetry={refresh} />;
+    const { title, detail } = describeApiError(error);
+    return <ErrorState title={title} detail={detail} onRetry={refresh} />;
   }
 
   if (!stats) return <LoadingState />;

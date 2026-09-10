@@ -33,6 +33,7 @@ import { cn } from "../utils/cn";
 import { useAiMode } from "../hooks/useAiMode";
 import { currentUser, sessionRole } from "../session";
 import { api } from "../services/api";
+import { API_BASE, DEMO_MODE, fetchApi } from "../services/apiConfig";
 import { timeAgo } from "../utils/cn";
 import type { AuditRecord, DashboardStats } from "../types";
 
@@ -94,7 +95,7 @@ const NAV: NavSection[] = [
   },
 ];
 
-const BASE = import.meta.env.VITE_API_URL ?? "/api";
+const BASE = API_BASE ?? "";
 
 function Breadcrumbs({ pathname }: { pathname: string }) {
   const crumbs = useMemo(() => {
@@ -301,7 +302,11 @@ export default function AppShell() {
 
   useEffect(() => {
     const check = () => {
-      fetch(`${BASE}/health`)
+      if (!BASE && !DEMO_MODE) {
+        setHealth("down");
+        return;
+      }
+      fetchApi(`${BASE || "/api"}/health`)
         .then((r) => setHealth(r.ok ? "ok" : "down"))
         .catch(() => setHealth("down"));
     };
