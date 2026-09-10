@@ -1,0 +1,22 @@
+{
+  "name": "nexus-comply",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Adaptive, Evidence-Driven Multi-Vendor Network Security Compliance Auditor",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:ai": "npm run dev --workspace=apps/ai-service",
+    "start-all": "node scripts/start-all.mjs",
+    "demo": "node scripts/start-all.mjs --reset",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}

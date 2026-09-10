@@ -1,0 +1,21 @@
+# Optional infrastructure for NEXUS-COMPLY.
+# The application runs fully WITHOUT Docker (uses JSON file storage + mock AI by default).
+# This compose file is provided for teams that prefer a real PostgreSQL instance.
+
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: nexus-comply-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: nexus_comply
+    ports:
+      - "5432:5432"
+    volumes:
+      - nexus-comply-db-data:/var/lib/postgresql/data
+
+volumes:
+  nexus-comply-db-data:

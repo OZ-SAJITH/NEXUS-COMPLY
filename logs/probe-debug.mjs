@@ -1,0 +1,18 @@
+import { chromium } from "playwright-core";
+const BASE = "http://localhost:5173";
+const browser = await chromium.launch({ executablePath: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", headless: true });
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const page = await ctx.newPage();
+page.on("console", (m) => console.log(`[console:${m.type()}] ${m.text()}`));
+page.on("pageerror", (e) => console.log("[pageerror]", String(e)));
+await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+await page.waitForSelector("form", { timeout: 15000 });
+await page.fill("#email", "reviewer@nexus-comply.sih");
+await page.fill("#password", "demo-reviewer");
+await page.click('button[type="submit"]');
+await page.waitForURL("**/app", { timeout: 20000 });
+await page.waitForTimeout(3000);
+const body = await page.evaluate(() => document.body.innerText.slice(0, 300));
+console.log("BODY SNIPPET:", JSON.stringify(body));
+console.log("ASIDES:", await page.locator("aside").count());
+await browser.close();
