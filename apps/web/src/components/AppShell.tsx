@@ -526,6 +526,7 @@ export default function AppShell() {
           ) : null}
         </div>
       </div>
+      <p className={cn("px-3 pb-3 text-[9px] font-medium uppercase tracking-[0.2em] text-slate-600", collapsed && "hidden")}>Developed by Sajith</p>
     </div>
   );
 

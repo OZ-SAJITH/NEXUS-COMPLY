@@ -73,6 +73,12 @@ export function LoadingScreen({
           </span>
         </p>
       </div>
+
+      {fullScreen ? (
+        <p className="loading-credit absolute bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 whitespace-nowrap" aria-hidden="true">
+          Developed by Sajith
+        </p>
+      ) : null}
     </div>
   );
 }

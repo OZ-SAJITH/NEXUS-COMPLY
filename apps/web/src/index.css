@@ -833,6 +833,16 @@ body {
 .ai-blink { animation: ai-blink 1.1s ease-in-out infinite; }
 @keyframes ai-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+/* Loading-screen developer credit — subtle, fades in after the brand reveal */
+.loading-credit {
+  opacity: 0;
+  animation: loading-credit-in 700ms var(--ease-out) 1250ms forwards;
+}
+@keyframes loading-credit-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 0.6; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reveal, .page-enter, .row-in,
   .glass-card, .glass-card::before,
@@ -861,10 +871,11 @@ body {
   .enter-up, .tab-btn::after, .ai-stage, .ai-stage-run .ai-node,
   .ai-stage-run .ai-bar > span, .ai-blink,
   .nav-item-in, .cf *, .nexus-core__sweep,
-  .loading-brand, .loading-brand__word,
+  .loading-brand, .loading-brand__word, .loading-credit,
   .loading-bar-fill, .loading-dots i { animation: none !important; }
   .enter-up { opacity: 1; transform: none; }
   .loading-brand, .loading-brand__word { opacity: 1; transform: none; letter-spacing: 0.32em; }
+  .loading-credit { opacity: 0.6; transform: none; }
   .loading-bar-fill { transform: scaleX(1) !important; }
   .loading-dots i { opacity: 0.5; transform: none; }
   .tab-btn::after { transform: scaleX(0) !important; }
