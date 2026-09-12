@@ -239,7 +239,7 @@ export default function LandingPage() {
       <footer className="border-t border-surface-800/60 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <Logo size={28} className="transition-opacity hover:opacity-90" />
-          <p className="text-xs text-slate-600">NEXUS-COMPLY · Smart India Hackathon prototype · evidence-driven adaptive compliance</p>
+          <p className="text-xs text-slate-600">NEXUS-COMPLY · Smart India Hackathon prototype · evidence-driven adaptive compliance · Developed by Sajith</p>
         </div>
       </footer>
     </div>
