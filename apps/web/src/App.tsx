@@ -14,11 +14,23 @@ import SettingsPage from "./pages/SettingsPage";
 import FindingDetailPage from "./pages/FindingDetailPage";
 import ReviewsPage from "./pages/ReviewsPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import GlobalCompliancePage from "./pages/gov/GlobalCompliancePage";
+import FrameworksPage from "./pages/gov/FrameworksPage";
+import ControlMappingsPage from "./pages/gov/ControlMappingsPage";
+import RegulatoryContextPage from "./pages/gov/RegulatoryContextPage";
+import ScenarioLabPage from "./pages/gov/ScenarioLabPage";
+import ChangeRequestsPage from "./pages/gov/ChangeRequestsPage";
+import NewChangePage from "./pages/gov/NewChangePage";
+import ChangeDetailPage from "./pages/gov/ChangeDetailPage";
+import ExceptionGuardianPage from "./pages/gov/ExceptionGuardianPage";
+import VendorRiskPage from "./pages/gov/VendorRiskPage";
+import GovernanceAuditPage from "./pages/gov/GovernanceAuditPage";
+import ComplianceDriftPage from "./pages/gov/ComplianceDriftPage";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   }, [pathname]);
   return null;
 }
@@ -56,6 +68,19 @@ export default function App() {
           <Route path="intelligence/recommendations" element={<IntelligencePage />} />
           <Route path="findings/:id" element={<FindingDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="governance" element={<GlobalCompliancePage />} />
+          <Route path="governance/passport" element={<GlobalCompliancePage />} />
+          <Route path="governance/frameworks" element={<FrameworksPage />} />
+          <Route path="governance/controls" element={<ControlMappingsPage />} />
+          <Route path="governance/regulatory" element={<RegulatoryContextPage />} />
+          <Route path="governance/scenarios" element={<ScenarioLabPage />} />
+          <Route path="governance/changes" element={<ChangeRequestsPage />} />
+          <Route path="governance/changes/new" element={<NewChangePage />} />
+          <Route path="governance/changes/:id" element={<ChangeDetailPage />} />
+          <Route path="governance/exceptions" element={<ExceptionGuardianPage />} />
+          <Route path="governance/vendors" element={<VendorRiskPage />} />
+          <Route path="governance/audit-trail" element={<GovernanceAuditPage />} />
+          <Route path="governance/drift" element={<ComplianceDriftPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
 

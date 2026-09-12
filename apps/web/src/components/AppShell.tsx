@@ -24,10 +24,21 @@ import {
   ChevronsLeft,
   ChevronsRight,
   X,
+  Globe2,
+  Layers,
+  GitPullRequest,
+  Scale,
+  LifeBuoy,
+  Boxes,
+  ScrollText,
+  FlaskConical,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 import { AnimatedNexusLogo, type NexusLogoState } from "./motion/AnimatedNexusLogo";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { LoadingScreen } from "./LoadingScreen";
+import { CommandPalette } from "./CommandPalette";
 import { BackgroundFx } from "./motion/BackgroundFx";
 import { cn } from "../utils/cn";
 import { useAiMode } from "../hooks/useAiMode";
@@ -44,7 +55,7 @@ interface NavItem {
   end?: boolean;
 }
 
-interface NavSection {
+export interface NavSection {
   title: string;
   items: NavItem[];
 }
@@ -90,6 +101,21 @@ const NAV: NavSection[] = [
     ],
   },
   {
+    title: "Global Governance",
+    items: [
+      { to: "/app/governance", label: "Passport", icon: Globe2, end: true },
+      { to: "/app/governance/frameworks", label: "Frameworks", icon: Layers },
+      { to: "/app/governance/controls", label: "Control Mapping", icon: ListChecks },
+      { to: "/app/governance/regulatory", label: "Regulatory", icon: Scale },
+      { to: "/app/governance/scenarios", label: "Scenario Lab", icon: FlaskConical },
+      { to: "/app/governance/changes", label: "Change Governance", icon: GitPullRequest },
+      { to: "/app/governance/exceptions", label: "Exceptions", icon: LifeBuoy },
+      { to: "/app/governance/vendors", label: "Vendor Risk", icon: Boxes },
+      { to: "/app/governance/audit-trail", label: "Audit Trail", icon: ScrollText },
+      { to: "/app/governance/drift", label: "Drift", icon: Activity },
+    ],
+  },
+  {
     title: "System",
     items: [{ to: "/app/settings", label: "Settings", icon: Settings, end: true }],
   },
@@ -120,6 +146,13 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
       recommendations: "Recommendations",
       settings: "Settings",
       dashboard: "Dashboard",
+      governance: "Global Governance",
+      passport: "Passport",
+      regulatory: "Regulatory",
+      scenarios: "Scenario Lab",
+      changes: "Change Governance",
+      exceptions: "Exceptions",
+      "audit-trail": "Audit Trail",
     };
     const parts = pathname.split("/").filter(Boolean).filter((p) => p !== "app");
     const out: { key: string; label: string }[] = [{ key: "app", label: "Workspace" }];
@@ -183,6 +216,7 @@ function SearchBar() {
         aria-label="Search audits and devices"
         aria-expanded={open}
       />
+      <kbd className="absolute right-2.5 top-2.5 pointer-events-none hidden sm:block text-[10px] text-slate-500 border border-surface-600 rounded px-1.5 py-0.5">Ctrl K</kbd>
       {open ? (
         <ul className="absolute z-50 top-12 left-0 right-0 rounded-lg glass shadow-lift p-1.5 max-h-72 overflow-auto toast-in">
           {matches.length === 0 ? (
@@ -283,6 +317,7 @@ export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [health, setHealth] = useState<"checking" | "ok" | "down">("checking");
   const [booting, setBooting] = useState(true);
   const [logoState, setLogoState] = useState<NexusLogoState>("IDLE");
@@ -301,12 +336,23 @@ export default function AppShell() {
   }, []);
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
     const check = () => {
       if (!BASE && !DEMO_MODE) {
         setHealth("down");
         return;
       }
-      fetchApi(`${BASE || "/api"}/health`)
+      fetchApi("/health")
         .then((r) => setHealth(r.ok ? "ok" : "down"))
         .catch(() => setHealth("down"));
     };
@@ -541,13 +587,17 @@ export default function AppShell() {
         </header>
         <main className="px-4 lg:px-6 py-6 lg:py-8 max-w-[1560px] mx-auto">
           <div key={location.pathname} className="page-enter">
-            <Outlet />
+            <ErrorBoundary title="Section failed to load">
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
         <footer className="px-4 lg:px-6 pb-6 text-center lg:text-right text-[11px] text-slate-600">
           NEXUS-COMPLY · evidence-driven adaptive compliance · {mode === "live" ? "live AI" : "offline demo mode"}
         </footer>
       </div>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} nav={NAV} />
     </div>
   );
 }

@@ -1,6 +1,11 @@
+import { lazy, Suspense } from "react";
 import type { ReactNode } from "react";
 import { cn } from "../../utils/cn";
 import { GlassCard } from "./GlassCard";
+
+const CyberGlobe = lazy(() =>
+  import("./CyberGlobe").then((m) => ({ default: m.CyberGlobe }))
+);
 
 export type NexusCoreState =
   | "IDLE"
@@ -52,7 +57,21 @@ export function NexusCore({
             <span className="nexus-core__radar absolute inset-0" aria-hidden="true" />
             <span className="nexus-core__sweep" aria-hidden="true" />
             <span className={cn("nexus-core__ring")} aria-hidden="true" />
-            <span className="nexus-core__orb w-full h-full flex items-center justify-center text-slate-950 text-2xl font-black" aria-hidden="true">N</span>
+            <Suspense
+              fallback={
+                <div className="relative w-full h-full">
+                  <div className="cb-fallback" aria-hidden="true">
+                    <span className="cb-fb halo" />
+                    <span className="cb-fb grid-a" />
+                    <span className="cb-fb grid-b" />
+                    <span className="cb-fb grid-c" />
+                  </div>
+                  <span className="cb-label" aria-hidden="true">N</span>
+                </div>
+              }
+            >
+              <CyberGlobe />
+            </Suspense>
           </div>
           <div className="text-center leading-tight">
             <div className="text-[10px] font-extrabold tracking-[0.24em] text-slate-200">{title}</div>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShieldCheck, AlertOctagon, FileWarning, Boxes, RefreshCw, Download, Plus, ClipboardCheck, ScanSearch, Gauge as GaugeIcon } from "lucide-react";
-import type { AuditRecord, DashboardStats } from "@nexus/shared-types";
+import { ShieldCheck, AlertOctagon, FileWarning, Boxes, RefreshCw, Download, Plus, ClipboardCheck, ScanSearch, Gauge as GaugeIcon, Globe2, GitPullRequest, LifeBuoy, Scale, Snowflake } from "lucide-react";
+import type { AuditRecord, DashboardStats, GovernanceDashboardStats, GovernanceEvaluation } from "@nexus/shared-types";
 import { api, describeApiError } from "../services/api";
 import { PageHeader } from "../components/PageHeader";
 import { MetricCard } from "../components/MetricCard";
@@ -47,6 +47,8 @@ function riskScore(stats: DashboardStats): number {
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [audits, setAudits] = useState<AuditRecord[]>([]);
+  const [gov, setGov] = useState<GovernanceDashboardStats | null>(null);
+  const [govEval, setGovEval] = useState<GovernanceEvaluation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const navigate = useNavigate();
@@ -55,10 +57,17 @@ export default function DashboardPage() {
   const refresh = useCallback(() => {
     setLoading(true);
     setError("");
-    Promise.all([api.getDashboard(), api.listAudits().catch(() => [] as AuditRecord[])])
-      .then(([d, a]) => {
+    Promise.all([
+      api.getDashboard(),
+      api.listAudits().catch(() => [] as AuditRecord[]),
+      api.gov.dashboard().catch(() => null as GovernanceDashboardStats | null),
+      api.gov.evaluate().catch(() => null as GovernanceEvaluation | null),
+    ])
+      .then(([d, a, g, ge]) => {
         setStats(d);
         setAudits(a);
+        setGov(g);
+        setGovEval(ge);
       })
       .catch((e) => setError(e))
       .finally(() => setLoading(false));
@@ -232,6 +241,70 @@ export default function DashboardPage() {
           accent="accent"
         /></Reveal>
       </div>
+
+      {/* Global governance */}
+      {gov ? (
+        <Reveal delay={90}>
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-slate-100">Global compliance governance</h2>
+              <Link to="/app/governance" className="text-xs text-accent hover:underline">Open governance →</Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+              <MetricCard
+                icon={<Globe2 className="w-[18px] h-[18px]" aria-hidden="true" />}
+                label="Passport score"
+                value={<><CountUp to={gov.passport.globalScore} /><span className="text-lg text-slate-500">%</span></>}
+                context={`${gov.passport.posture} posture · ${gov.passport.frameworks.filter((f) => f.applicable).length} applicable frameworks`}
+                accent={gov.passport.globalScore >= 85 ? "ok" : gov.passport.globalScore >= 70 ? "accent" : gov.passport.globalScore >= 55 ? "warn" : "danger"}
+                link={{ to: "/app/governance", label: "View passport" }}
+              />
+              <MetricCard
+                icon={<GitPullRequest className="w-[18px] h-[18px]" aria-hidden="true" />}
+                label="Pending approvals"
+                value={gov.pendingApprovals}
+                context={`${gov.highRiskChanges} high-risk changes in flight`}
+                accent={gov.pendingApprovals > 0 ? "warn" : "ok"}
+                link={{ to: "/app/governance/changes", label: "Change governance" }}
+              />
+              <MetricCard
+                icon={<LifeBuoy className="w-[18px] h-[18px]" aria-hidden="true" />}
+                label="Open exceptions"
+                value={gov.openExceptions}
+                context="blocking automated remediation"
+                accent={gov.openExceptions > 0 ? "danger" : "ok"}
+                link={{ to: "/app/governance/exceptions", label: "Exception Guardian" }}
+              />
+              <MetricCard
+                icon={<Scale className="w-[18px] h-[18px]" aria-hidden="true" />}
+                label="Drift & conflicts"
+                value={gov.activeDrift + gov.regionConflicts}
+                context={`${gov.activeDrift} drift · ${gov.regionConflicts} regional conflicts`}
+                accent={gov.activeDrift + gov.regionConflicts > 0 ? "warn" : "ok"}
+                link={{ to: "/app/governance/regulatory", label: "Regulatory context" }}
+              />
+              <MetricCard
+                icon={gov.freezeActive ? <Snowflake className="w-[18px] h-[18px]" aria-hidden="true" /> : <GitPullRequest className="w-[18px] h-[18px] text-sky-300" aria-hidden="true" />}
+                label="Change freeze"
+                value={gov.freezeActive ? "ACTIVE" : "OFF"}
+                context={`${gov.regulatoryUpdates} regulatory updates pending`}
+                accent={gov.freezeActive ? "warn" : "ok"}
+                link={{ to: "/app/governance/changes", label: "Safety gate" }}
+              />
+              {govEval ? (
+                <MetricCard
+                  icon={<Scale className="w-[18px] h-[18px]" aria-hidden="true" />}
+                  label="Policy engine"
+                  value={`${govEval.activeCount} · ${govEval.conditionalCount}`}
+                  context={`${govEval.activeCount} active · ${govEval.conditionalCount} conditional frameworks · ${govEval.conflicts.length} policy conflicts`}
+                  accent={govEval.conflicts.length > 0 ? "warn" : "ok"}
+                  link={{ to: "/app/governance", label: "Active governance" }}
+                />
+              ) : null}
+            </div>
+          </div>
+        </Reveal>
+      ) : null}
 
       {/* Human-in-the-loop */}
       <Reveal delay={120}>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { AuditRecord } from "@nexus/shared-types";
 import { api } from "../services/api";
 import { PageHeader } from "../components/PageHeader";
@@ -19,6 +19,7 @@ const TABS = [
 
 export default function InfrastructurePage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const tab = TABS.find((t) => t.to === location.pathname)?.key ?? "vendors";
   const [audits, setAudits] = useState<AuditRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +131,7 @@ export default function InfrastructurePage() {
         <div className="card !p-5">
           <h2 className="text-base font-semibold text-slate-100 mb-1">Network topology</h2>
           <p className="text-xs text-slate-500 mb-4">Live device posture on the security architecture. Click a node to inspect and jump to its audit.</p>
-          <NetworkGraph audits={audits} onOpen={() => undefined} />
+          <NetworkGraph audits={audits} onOpen={(device) => navigate(`/app/audits/${device.auditId}`)} />
         </div>
       ) : null}
 

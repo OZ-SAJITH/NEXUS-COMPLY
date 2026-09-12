@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@nexus/compliance-rules": "file:../../packages/compliance-rules",
+    "@nexus/governance-core": "file:../../packages/governance-core",
     "@nexus/security-intent": "file:../../packages/security-intent",
     "@nexus/shared-types": "file:../../packages/shared-types",
     "cors": "^2.8.5",

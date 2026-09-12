@@ -12,11 +12,13 @@ import { detectVendor, fingerprintSyntax, splitLines, extractSnippet } from "../
 import { redactSecrets } from "../utils/redact";
 import { uniqueId } from "../utils/helpers";
 import { reviewsRouter } from "./reviews";
+import { governanceRouter } from "./governance";
 import { SYSTEM_REVIEWER } from "../services/auth";
 import { isAuditSealed } from "../services/reviewService";
 
 export const apiRouter = Router();
 
+apiRouter.use(governanceRouter);
 apiRouter.use(reviewsRouter);
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB

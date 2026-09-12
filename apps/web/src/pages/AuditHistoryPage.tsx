@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { FileText } from "lucide-react";
+import { FileText, Search } from "lucide-react";
 import type { AuditRecord } from "@nexus/shared-types";
 import { api } from "../services/api";
 import { PageHeader } from "../components/PageHeader";
@@ -13,6 +13,18 @@ export default function AuditHistoryPage() {
   const [audits, setAudits] = useState<AuditRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [vendor, setVendor] = useState("ALL");
+
+  const vendors = useMemo(() => [...new Set(audits.map((a) => a.vendor))].sort(), [audits]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return audits
+      .filter((a) => (vendor === "ALL" ? true : a.vendor === vendor))
+      .filter((a) => !q || `${a.configurationName} ${a.id} ${a.vendor}`.toLowerCase().includes(q))
+      .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
+  }, [audits, query, vendor]);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -49,7 +61,28 @@ export default function AuditHistoryPage() {
           />
         </div>
       ) : (
-        <div className="card overflow-hidden !p-0">
+        <>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <div className="relative flex-1 min-w-[220px] max-w-sm">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" aria-hidden="true" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search configuration, ID or vendor…"
+                className="input !pl-9 !py-2 text-sm"
+                aria-label="Search audits"
+              />
+            </div>
+            <select value={vendor} onChange={(e) => setVendor(e.target.value)} className="input !py-2 text-sm" aria-label="Filter by vendor">
+              <option value="ALL">All vendors</option>
+              {vendors.map((v) => (
+                <option key={v} value={v}>{VENDOR_META[v]?.name ?? v}</option>
+              ))}
+            </select>
+            <span className="text-[11px] text-slate-500 ml-auto">{visible.length} audit{visible.length === 1 ? "" : "s"}</span>
+          </div>
+
+          <div className="card overflow-hidden !p-0">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead>
@@ -64,7 +97,10 @@ export default function AuditHistoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {audits.map((a, i) => {
+                {visible.length === 0 ? (
+                  <tr><td colSpan={7} className="py-10 text-center text-sm text-slate-500">No audits match the current filters.</td></tr>
+                ) : (
+                visible.map((a, i) => {
                   const failing = a.findings.filter((f) => f.status === "FAIL");
                   const band = a.risk ? riskBandLabel(a.risk.overallScore) : "INFO";
                   const meta = VENDOR_META[a.vendor] ?? VENDOR_META.unknown;
@@ -92,11 +128,13 @@ export default function AuditHistoryPage() {
                       </td>
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

@@ -69,10 +69,26 @@ body {
     @apply bg-surface-900 border border-surface-700/70 rounded-xl p-5 shadow-panel transition-colors;
   }
   .card-hover {
-    @apply hover:border-accent/30 hover:bg-surface-850 transition-colors;
+    @apply hover:border-accent/30 hover:bg-surface-850;
+    transition:
+      transform 260ms var(--ease-control),
+      background-color 260ms var(--ease-control),
+      border-color 260ms var(--ease-control),
+      box-shadow 260ms var(--ease-control);
+  }
+  .card-hover:hover {
+    transform: translateY(-1px);
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2;
+    transition:
+      transform 200ms var(--ease-control),
+      background-color 200ms var(--ease-control),
+      border-color 200ms var(--ease-control),
+      color 200ms var(--ease-control),
+      box-shadow 200ms var(--ease-control),
+      opacity 160ms var(--ease-control);
+    will-change: transform;
   }
   .btn-primary {
     @apply btn bg-accent text-slate-950 hover:bg-accent-dim active:scale-[0.98];
@@ -134,6 +150,8 @@ body {
   /* easing */
   --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-exp: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-control: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.4, 1);
   /* glass / glow */
   --glass-bg: rgba(13, 22, 40, 0.42);
@@ -181,7 +199,7 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 .row-in {
-  animation: row-in 400ms var(--ease-exp) both;
+  animation: row-in 400ms var(--ease-exp) backwards;
   animation-delay: var(--row-delay, 0ms);
 }
 
@@ -314,10 +332,10 @@ body {
   100% { transform: scale(1.35); opacity: 0; }
 }
 @keyframes ai-scan {
-  0% { top: -6%; opacity: 0; }
+  0% { transform: translateY(-6%); opacity: 0; }
   12% { opacity: 1; }
   88% { opacity: 1; }
-  100% { top: 104%; opacity: 0; }
+  100% { transform: translateY(104%); opacity: 0; }
 }
 @keyframes ai-wave {
   0%, 100% { transform: scaleY(0.35); }
@@ -371,7 +389,7 @@ body {
 /* ============================================================
    Nexus Flow pipeline
    ============================================================ */
-@keyframes flow-progress { from { width: 0%; } to { width: 100%; } }
+@keyframes flow-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes flow-node-on {
   0% { opacity: 0.4; transform: scale(0.8); }
   100% { opacity: 1; transform: scale(1); }
@@ -382,6 +400,8 @@ body {
   100% { transform: scale(1); }
 }
 .nexus-flow-progress {
+  transform: scaleX(0);
+  transform-origin: left;
   animation: flow-progress 3.4s var(--ease-out) both;
 }
 .nexus-flow-node {
@@ -403,9 +423,13 @@ body {
   to { opacity: 0; transform: translateY(10px) scale(0.98); filter: blur(3px); }
 }
 .toast-in { animation: toast-in var(--dur-med) var(--ease-spring) both; }
-.toast-out { animation: toast-out var(--dur-fast) var(--ease-out) both; }
-@keyframes toast-bar { from { width: 100%; } to { width: 0%; } }
-.toast-bar { animation: toast-bar 3s linear both; transform-origin: left; }
+.toast-out { animation: toast-out var(--dur-fast) var(--ease-exit) both; }
+@keyframes toast-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.toast-bar {
+  transform: scaleX(1);
+  transform-origin: left;
+  animation: toast-bar 3s linear both;
+}
 
 /* Modal */
 @keyframes modal-back {
@@ -423,7 +447,7 @@ body {
 .modal-back { animation: modal-back var(--dur-normal) var(--ease-out) both; }
 .modal-back.out { animation-name: modal-back; animation-direction: reverse; opacity: 0; }
 .modal-panel { animation: modal-panel var(--dur-med) var(--ease-spring) both; }
-.modal-panel.out { animation: modal-panel-out var(--dur-fast) var(--ease-out) both; }
+.modal-panel.out { animation: modal-panel-out var(--dur-fast) var(--ease-exit) both; }
 
 /* ============================================================
    Buttons — pressed + success micro-states
@@ -792,14 +816,20 @@ body {
   background: rgba(16, 185, 129, 0.12);
 }
 .ai-bar { width: 100%; height: 3px; border-radius: 9999px; background: rgba(30, 41, 59, 0.9); overflow: hidden; }
-.ai-bar > span { width: 0; transition: width 700ms var(--ease-exp); }
-.ai-stage-done .ai-bar > span { width: 100%; background: linear-gradient(90deg, #10b981, #34d399); }
-.ai-stage-run .ai-bar > span {
-  width: 88%;
-  background: linear-gradient(90deg, #0ea5e9, #38bdf8);
-  animation: ai-bar-fill 1.3s ease-in-out infinite alternate;
+.ai-bar > span {
+  display: block;
+  height: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 700ms var(--ease-exp), background-color 300ms var(--ease-exp);
 }
-@keyframes ai-bar-fill { from { width: 24%; } to { width: 92%; } }
+.ai-stage-done .ai-bar > span { transform: scaleX(1); background: linear-gradient(90deg, #10b981, #34d399); }
+.ai-stage-run .ai-bar > span {
+  transform: scaleX(0.88);
+  background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+  animation: ai-bar-fill 1.3s var(--ease-out) infinite alternate;
+}
+@keyframes ai-bar-fill { from { transform: scaleX(0.24); } to { transform: scaleX(0.92); } }
 .ai-blink { animation: ai-blink 1.1s ease-in-out infinite; }
 @keyframes ai-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
@@ -821,21 +851,84 @@ body {
   .nexus-logo__halo, .nexus-logo__scan,
   .nexus-logo__particles i, .nexus-logo__sweep,
   .check-anim,
-  .nexus-core__ring, .nexus-core__radar,
+  .nexus-core__ring, .nexus-core__radar, .cb-glow, .cb-fallback .cb-fb,
   .audit-line, .timeline-node, .timeline-icon,
   .nexus-flow-particle, .nav-pill::before, .nav-tip, .rg-step {
     animation: none !important;
   }
+  .cb-glow { opacity: 0.85; }
+  .cb-fallback { animation: none !important; }
   .enter-up, .tab-btn::after, .ai-stage, .ai-stage-run .ai-node,
   .ai-stage-run .ai-bar > span, .ai-blink,
-  .nav-item-in, .cf *, .nexus-core__sweep { animation: none !important; }
+  .nav-item-in, .cf *, .nexus-core__sweep,
+  .loading-brand, .loading-brand__word,
+  .loading-bar-fill, .loading-dots i { animation: none !important; }
   .enter-up { opacity: 1; transform: none; }
+  .loading-brand, .loading-brand__word { opacity: 1; transform: none; letter-spacing: 0.32em; }
+  .loading-bar-fill { transform: scaleX(1) !important; }
+  .loading-dots i { opacity: 0.5; transform: none; }
   .tab-btn::after { transform: scaleX(0) !important; }
-  .ai-stage-done .ai-bar > span { width: 100% !important; }
+  .ai-stage-done .ai-bar > span { transform: scaleX(1) !important; }
   .nexus-logo__sweep, .nexus-logo__scan, .nexus-logo__particles { opacity: 0 !important; }
   .nexus-logo--success .nexus-logo__check { display: flex !important; opacity: 1 !important; }
   .nexus-logo--success .nexus-logo__halo { opacity: 0.7 !important; }
   .nexus-logo__mark { transform: none !important; }
+}
+
+/* ============================================================
+   Loading-screen brand reveal + progress + status ticks
+   ============================================================ */
+.loading-brand {
+  opacity: 0;
+  animation: loading-brand-in 600ms var(--ease-out) 180ms forwards;
+}
+@keyframes loading-brand-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: none; }
+}
+.loading-brand__word {
+  animation: loading-word-in 650ms var(--ease-out) both;
+  animation-delay: calc(180ms + var(--w-i, 0) * 90ms);
+}
+.loading-brand__word:nth-child(2) { --w-i: 1; }
+@keyframes loading-word-in {
+  from { opacity: 0; transform: translateX(28px); letter-spacing: 0.48em; }
+  to   { opacity: 1; transform: none; letter-spacing: 0.32em; }
+}
+
+.loading-bar-fill {
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: loading-bar 1.08s var(--ease-exp) 120ms forwards;
+}
+@keyframes loading-bar {
+  0%   { transform: scaleX(0); }
+  24%  { transform: scaleX(0.24); }
+  52%  { transform: scaleX(0.56); }
+  78%  { transform: scaleX(0.86); }
+  100% { transform: scaleX(1); }
+}
+
+.loading-dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.loading-dots i {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.25;
+  animation: loading-dot-pulse 1.4s ease-in-out infinite;
+}
+.loading-dots i:nth-child(2) { animation-delay: 160ms; }
+.loading-dots i:nth-child(3) { animation-delay: 320ms; }
+@keyframes loading-dot-pulse {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.85); }
+  40%           { opacity: 1;   transform: scale(1); }
 }
 
 /* ============================================================
@@ -914,3 +1007,80 @@ body {
 }
 .nexus-core--idle .nexus-core__sweep,
 .nexus-core--verified .nexus-core__sweep { animation-duration: 16s; }
+
+/* ============================================================
+   NEXUS CyberGlobe — rotating 3D globe hero (replaces static N orb)
+   ============================================================ */
+.cyber-globe { pointer-events: auto; touch-action: pan-y; will-change: transform; }
+.cyber-globe canvas { will-change: transform; }
+
+.cb-glow {
+  position: absolute;
+  inset: -16%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.3), rgba(2, 6, 23, 0) 62%);
+  filter: blur(2px);
+  opacity: 0.75;
+  pointer-events: none;
+  animation: cb-breath 5.5s ease-in-out infinite;
+  transition: opacity var(--dur-normal) var(--ease-out);
+}
+.cb-glow-on { opacity: 1; }
+@keyframes cb-breath {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.95; }
+}
+
+.cb-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 1.35rem;
+  line-height: 1;
+  color: #dff4ff;
+  text-shadow:
+    0 0 8px rgba(56, 189, 248, 0.9),
+    0 0 22px rgba(56, 189, 248, 0.5),
+    0 0 2px rgba(2, 6, 23, 0.9);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* CSS-only fallback globe (WebGL unavailable) */
+.cb-fallback {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  perspective: 260px;
+  background: radial-gradient(circle at 50% 42%, #0b1220 0%, #020617 72%);
+  box-shadow: inset 0 0 18px rgba(56, 189, 248, 0.18);
+}
+.cb-fb {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  backface-visibility: hidden;
+}
+.cb-fb.halo { border: none; background: radial-gradient(circle at 50% 46%, rgba(56, 189, 248, 0.16), transparent 62%); }
+.cb-fb.grid-a { animation: cb-rolya 26s linear infinite; will-change: transform; }
+.cb-fb.grid-b { animation: cb-rolyb 30s linear infinite reverse; will-change: transform; }
+.cb-fb.grid-c { animation: cb-rolzc 20s linear infinite; will-change: transform; }
+@keyframes cb-rolya {
+  from { transform: rotateX(24deg) rotateY(0deg); }
+  to { transform: rotateX(24deg) rotateY(360deg); }
+}
+@keyframes cb-rolyb {
+  from { transform: rotateY(52deg) rotateX(10deg); }
+  to { transform: rotateY(412deg) rotateX(10deg); }
+}
+@keyframes cb-rolzc {
+  from { transform: rotateZ(18deg) scale(0.78); }
+  to { transform: rotateZ(378deg) scale(0.78); }
+}
+.cb-fb.grid-a { border: 1px solid rgba(56, 189, 248, 0.45); }
+.cb-fb.grid-b { border: 1px dashed rgba(56, 189, 248, 0.32); }
+.cb-fb.grid-c { border: 1px solid rgba(103, 232, 249, 0.25); }
