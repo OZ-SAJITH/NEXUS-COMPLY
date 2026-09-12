@@ -301,8 +301,21 @@ function Notifications() {
 function LiveClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
+    const visible = window.matchMedia("(min-width: 1280px)");
+    let t: number | undefined;
+    const sync = () => {
+      if (t !== undefined) clearInterval(t);
+      if (!visible.matches) return;
+      setNow(new Date());
+      t = window.setInterval(() => setNow(new Date()), 1000);
+    };
+    sync();
+    const onChange = () => sync();
+    visible.addEventListener("change", onChange);
+    return () => {
+      if (t !== undefined) clearInterval(t);
+      visible.removeEventListener("change", onChange);
+    };
   }, []);
   return (
     <span className="hidden xl:flex items-center gap-1.5 text-xs text-slate-500 font-mono" aria-label="Current date and time">

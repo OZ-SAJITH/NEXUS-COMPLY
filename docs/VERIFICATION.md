@@ -1,9 +1,9 @@
 # NEXUS-COMPLY — Verification Report
 
-Evidence for the prototype build (SIH26155). Every item below was executed on this machine; numbers are real outputs, not claims.
+Evidence for the final release build (SIH26155). Every item below was executed on this machine; numbers are real outputs, not claims.
 
 ## 1. Automated tests — `npm test`
-Vitest, 6 suites / **37 tests passing**:
+Vitest, 7 suites / **52 tests passing**:
 
 | Suite | Coverage | Tests |
 |---|---|---|
@@ -13,6 +13,7 @@ Vitest, 6 suites / **37 tests passing**:
 | `ai.test.ts` | interpretation contract, evidence refs, **wildcard-address regression (10.0.0.0/8 ≠ 0.0.0.0)**, offline fallback, secret redaction | 6 |
 | `approval.test.ts` | fresh unknown→PENDING, approve→reuse, branch variant reuses, reject→no mapping | 4 |
 | `remediation.test.ts` | after > before, never mutates config, one step per failing control | 3 |
+| `review.test.ts` | Human Review Queue flow + idempotent backfill of legacy FAIL/WARNING findings | 15 |
 
 Regression fixed during verification: the wildcard check `0\.0\.0\.0` previously matched *inside*
 `10.0.0.0/8`, so a restricted management network could be misread as unrestricted. Both the
@@ -20,8 +21,52 @@ JS fallback interpreter and the Python mock interpreter now match the exact wild
 (verified live: `SOURCE "10.0.0.0/8"` → sourceRestriction=true; `SOURCE "0.0.0.0"` → false).
 
 ## 2. Type checks & build
+- `npx tsc --noEmit -p apps/web/tsconfig.json` → clean (final state, all fixes applied).
 - `npx tsc -p apps/api/tsconfig.json --noEmit` → clean.
-- `npm run build --workspace=apps/web` (`tsc --noEmit && vite build`) → clean, 849 modules, dist produced.
+- `npm run build --workspace=apps/web` (`tsc --noEmit && vite build`) → clean, dist produced (~6.9s). Chunk-size warnings are pre-existing informational output about bundle size only, not build errors, and do not affect GitHub Pages deployment.
+
+## 2a. Final QA scope (this release cycle)
+QA ran against three distinct runtimes to match every deployment path:
+
+| Runtime | Base URL | Behavior | Result |
+|---|---|---|---|
+| Live API | `http://localhost:5173` (vite dev + Express `:4000`) | full backend, empty baseline reseeded | 38/38 flows, 0 console errors |
+| GitHub Pages demo | `http://localhost:4173` (built `dist`, static) | in-browser demo API + localStorage, zero network | 40/40 flows, 0 console errors, 0 failed requests |
+| Responsive matrix | `http://localhost:4173` (built `dist`) | 5 viewports × 5 routes + drawer + console | 34/34 checks, 0 horizontal overflow |
+
+### 2a.1 Functional matrix (Playwright, headless Edge)
+Covers: landing, dashboard KPIs, AI OFFLINE/LIVE badge + reviewer session, Global Compliance Passport, request-human-review on conflicts (card → toast → `REVIEW REQUESTED`), region switch IN→India+EU re-deriving frameworks, Compliance Overview/Frameworks/Controls/Findings, Human Review Queue, vendors, devices posture, networks topology + Investigate, assets, New Audit wizard, full end-to-end audit via sample asset, history search, reports, AI Insights, risk analysis, recommendations, Governance frameworks, control mapping, regulatory context, Scenario Lab (runs a scenario to change detail), Safe Change Governance (full analyze→simulate→approve→execute→verify gate workflow), Exception Guardian, vendor risk + dependency graph, audit trail pagination, compliance drift, **drift-acknowledge persistence across reload in demo mode**, Settings, 404 route, Ctrl+K palette, refresh re-fetch.
+
+### 2a.2 Responsive matrix
+`desktop-wide 1600 · laptop 1366 · tablet-lg 1024 · tablet-portrait 768 · mobile 390`, routes `/app`, `/app/governance`, `/app/governance/drift`, `/app/audits/history`, `/app/compliance`. All PASS with no horizontal overflow and no unexpected console errors; mobile drawer open/close verified at both ≤768 widths.
+
+## 2a.3 Performance audit (animation/runtime)
+All animation & polling audited for duplicate loops, back-to-back listeners, unmount leaks and unnecessary layout work:
+
+| Check | Verdict |
+|---|---|
+| CyberGlobe — object-direct `useFrame` rotation (no per-frame React state), `frameloop="demand"` while paused, rendered materials memoized and disposed, IntersectionObserver + `visibilitychange` pause, DPR capped at 2 | clean |
+| NexusCore lazy-loads CyberGlobe; wrapper `pointer-events-none` | clean |
+| BackgroundFx canvas — rAF loop cleaned up, cancelled on unmount, reduced-motion aware, DPR capped | clean |
+| ComplianceFlow / NexusFlow — pure CSS animations, no JS timer | clean |
+| CountUp — bounded rAF, cancelled on unmount | clean |
+| AIAnalysisAnimation — interval gated to `ANALYZING` state + reduced motion, cleaned | clean |
+| useAiMode — single fetch with AbortController | clean |
+| AppShell health poll — 30s interval, cleaned on unmount | clean |
+| LiveClock — **was 1s `setInterval` always running** | **fixed** |
+| `flow-particle` keyframe animates `left` | negligible (10px element), left as-is |
+| gateway-flow rAF monkey-patch | only inside generated preview iframe, safe |
+
+### 2a.4 Bugs found & fixed this cycle
+1. **`AppShell.tsx` LiveClock ran a 1s `setInterval` unconditionally** (even when visually hidden) — now gated to `matchMedia("(min-width: 1280px)")` with a `change` listener to bridge viewport crossings.
+2. **`SafetyGate.tsx` missing React `key` on mapped fragments** — dev-only `console.error`; wrapped items in `<Fragment key>`.
+3. **`GlobalCompliancePage.tsx` mobile horizontal overflow (+193px)** — the Framework Coverage grid (`md:grid-cols-2` with no base column) sized its auto grid track to max-content at <md; long framework names widened the page. Fixed with `grid-cols-[minmax(0,1fr)] md:grid-cols-2`.
+4. **`CompliancePage.tsx` mobile horizontal overflow (+26px)** — the section tab nav had no scroll containment; active "Findings" tab clipped off-viewport at 390px. Fixed with `overflow-x-auto`.
+
+All four fixes verified by re-running tsc, build, and the full QA matrix (sections 2a.1–2a.2), and by the API suite (52/52). No regressions.
+
+## 2a.5 GitHub Pages readiness
+The built app ships in demo mode when no API base is configured (`DEMO_MODE` = running on `pages` OR `API_BASE===null`), verified on the built `dist` at `:4173`: no network calls fail, localStorage persistence works across reload (drift acknowledgment survived), reviewer session present without any auth backend. Deploy = static `apps/web/dist` only.
 
 ## 3. Sample smoke test — `scripts/smoketest.ts`
 Real pipeline (`runAudit` → parse → evaluate → risk). Every FAIL finding carried evidence (no evidence-less findings).

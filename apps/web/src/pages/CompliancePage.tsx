@@ -72,7 +72,7 @@ export default function CompliancePage() {
         title="Compliance"
         subtitle="Policy posture mapped to frameworks, controls and live findings across all audited configurations."
       />
-      <nav className="flex gap-1 border-b border-surface-700 mb-6" aria-label="Compliance sections">
+      <nav className="flex gap-1 border-b border-surface-700 mb-6 overflow-x-auto" aria-label="Compliance sections">
         {TABS.map((t) => (
           <Link
             key={t.key}

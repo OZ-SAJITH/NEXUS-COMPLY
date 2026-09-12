@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { ChangeRequest } from "@nexus/shared-types";
 import { ScanSearch, FlaskConical, ShieldCheck, Play, RotateCcw, Snowflake, UserCheck, Lock } from "lucide-react";
 import { cn } from "../../utils/cn";
@@ -80,7 +81,9 @@ export function SafetyGate({ change, freeze, actions, isReviewer }: { change: Ch
       ) : null}
 
       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-        {labels.map((l, i) => step(l, i < cur, i === cur, i))}
+        {labels.map((l, i) => (
+          <Fragment key={l}>{step(l, i < cur, i === cur, i)}</Fragment>
+        ))}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">

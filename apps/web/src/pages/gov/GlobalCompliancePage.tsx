@@ -604,7 +604,7 @@ export default function GlobalCompliancePage() {
                 <p className="text-xs text-slate-500 mt-0.5">Controls mapped and assessed per framework.</p>
               </div>
             </div>
-            <div className="grid md:grid-cols-2 gap-x-6 gap-y-3">
+            <div className="grid grid-cols-[minmax(0,1fr)] md:grid-cols-2 gap-x-6 gap-y-3">
               {passport.frameworks.map((c) => (
                 <div key={c.frameworkId} className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
