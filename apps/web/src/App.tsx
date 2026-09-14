@@ -26,6 +26,12 @@ import ExceptionGuardianPage from "./pages/gov/ExceptionGuardianPage";
 import VendorRiskPage from "./pages/gov/VendorRiskPage";
 import GovernanceAuditPage from "./pages/gov/GovernanceAuditPage";
 import ComplianceDriftPage from "./pages/gov/ComplianceDriftPage";
+import EnterpriseAssetsPage from "./pages/enterprise/AssetsPage";
+import EnterpriseAssetDetailPage from "./pages/enterprise/AssetDetailPage";
+import EnterpriseTopologyPage from "./pages/enterprise/TopologyPage";
+import EnterpriseConnectorsPage from "./pages/enterprise/ConnectorsPage";
+import EnterpriseRemediationsPage from "./pages/enterprise/RemediationsPage";
+import EnterpriseAuditPage from "./pages/enterprise/EnterpriseAuditPage";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -81,6 +87,13 @@ export default function App() {
           <Route path="governance/vendors" element={<VendorRiskPage />} />
           <Route path="governance/audit-trail" element={<GovernanceAuditPage />} />
           <Route path="governance/drift" element={<ComplianceDriftPage />} />
+          <Route path="enterprise" element={<EnterpriseAssetsPage />} />
+          <Route path="enterprise/assets" element={<EnterpriseAssetsPage />} />
+          <Route path="enterprise/assets/:id" element={<EnterpriseAssetDetailPage />} />
+          <Route path="enterprise/topology" element={<EnterpriseTopologyPage />} />
+          <Route path="enterprise/connectors" element={<EnterpriseConnectorsPage />} />
+          <Route path="enterprise/remediation" element={<EnterpriseRemediationsPage />} />
+          <Route path="enterprise/audit" element={<EnterpriseAuditPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
 

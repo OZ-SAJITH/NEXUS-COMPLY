@@ -3,6 +3,9 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { getRepository } from "../storage/jsonRepo";
 import { runAudit } from "./auditService";
+import { ConnectorManager } from "./enterprise/connectorManager";
+import { ensureAssets } from "./enterprise/assetService";
+import { matureEstate, upgradeStoredEvidenceIntegrity } from "@nexus/enterprise-catalog";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SAMPLES_ROOT = join(__dirname, "../../../../samples");
@@ -39,4 +42,37 @@ export async function seedIfEmpty(): Promise<void> {
       console.error(`[nexus-api] failed to seed ${file}:`, err);
     }
   }
+}
+
+/**
+ * Seeds the enterprise catalog (connectors + discovered assets) on first
+ * startup when the enterprise collections are empty. After the initial
+ * discovery pass the estate is matured to SCANNABLE so the demo opens with a
+ * live, active portfolio (metrics like "active assets" are meaningful).
+ */
+export async function seedEnterpriseIfEmpty(): Promise<void> {
+  const repo = getRepository();
+  const manager = new ConnectorManager(repo);
+  await manager.ensureSeeded();
+  await ensureAssets({ repo, manager });
+
+  const assets = await repo.allAssets();
+  const immature = assets.filter((a) => a.discoveryStatus === "DISCOVERED");
+  if (immature.length > 0) {
+    const byId = new Map(assets.map((a) => [a.id, a]));
+    for (const a of matureEstate(immature)) byId.set(a.id, a);
+    await repo.saveAssets([...byId.values()]);
+    console.log(`[nexus-api] matured ${immature.length} asset(s) to SCANNABLE for the portfolio view`);
+  }
+
+  // Upgrade legacy stored evidence whose integrity hash predates the PHASE 2
+  // normalization engine (SHA-256 over the canonical payload). Idempotent.
+  const stored = await repo.allEvidence();
+  const { records, upgraded } = upgradeStoredEvidenceIntegrity(stored);
+  if (upgraded > 0) {
+    await repo.saveEvidenceBatch(records);
+    console.log(`[nexus-api] re-derived SHA-256 integrity for ${upgraded} stored evidence record(s)`);
+  }
+
+  console.log("[nexus-api] enterprise catalog seeded (connectors + assets)");
 }

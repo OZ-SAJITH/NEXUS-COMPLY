@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShieldCheck, AlertOctagon, FileWarning, Boxes, RefreshCw, Download, Plus, ClipboardCheck, ScanSearch, Gauge as GaugeIcon, Globe2, GitPullRequest, LifeBuoy, Scale, Snowflake } from "lucide-react";
-import type { AuditRecord, DashboardStats, GovernanceDashboardStats, GovernanceEvaluation } from "@nexus/shared-types";
+import { ShieldCheck, AlertOctagon, FileWarning, Boxes, RefreshCw, Download, Plus, ClipboardCheck, ScanSearch, Gauge as GaugeIcon, Globe2, GitPullRequest, LifeBuoy, Scale, Snowflake, Cable, Wrench } from "lucide-react";
+import type { AuditRecord, DashboardStats, GovernanceDashboardStats, GovernanceEvaluation, AssetRecord, ConnectorRecord, RemediationRecord } from "@nexus/shared-types";
 import { api, describeApiError } from "../services/api";
 import { PageHeader } from "../components/PageHeader";
 import { MetricCard } from "../components/MetricCard";
@@ -49,6 +49,9 @@ export default function DashboardPage() {
   const [audits, setAudits] = useState<AuditRecord[]>([]);
   const [gov, setGov] = useState<GovernanceDashboardStats | null>(null);
   const [govEval, setGovEval] = useState<GovernanceEvaluation | null>(null);
+  const [entAssets, setEntAssets] = useState<AssetRecord[]>([]);
+  const [entConnectors, setEntConnectors] = useState<ConnectorRecord[]>([]);
+  const [entRems, setEntRems] = useState<RemediationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const navigate = useNavigate();
@@ -62,12 +65,18 @@ export default function DashboardPage() {
       api.listAudits().catch(() => [] as AuditRecord[]),
       api.gov.dashboard().catch(() => null as GovernanceDashboardStats | null),
       api.gov.evaluate().catch(() => null as GovernanceEvaluation | null),
+      api.enterprise.assets().catch(() => [] as AssetRecord[]),
+      api.enterprise.connectors().catch(() => [] as ConnectorRecord[]),
+      api.enterprise.remediations().catch(() => [] as RemediationRecord[]),
     ])
-      .then(([d, a, g, ge]) => {
+      .then(([d, a, g, ge, ea, ec, er]) => {
         setStats(d);
         setAudits(a);
         setGov(g);
         setGovEval(ge);
+        setEntAssets(ea);
+        setEntConnectors(ec);
+        setEntRems(er);
       })
       .catch((e) => setError(e))
       .finally(() => setLoading(false));
@@ -301,6 +310,52 @@ export default function DashboardPage() {
                   link={{ to: "/app/governance", label: "Active governance" }}
                 />
               ) : null}
+            </div>
+          </div>
+        </Reveal>
+      ) : null}
+
+      {/* Enterprise closed-loop */}
+      {entAssets.length ? (
+        <Reveal delay={100}>
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-slate-100">Enterprise remediation loop</h2>
+              <Link to="/app/enterprise" className="text-xs text-accent hover:underline">Open enterprise →</Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <MetricCard
+                icon={<Boxes className="w-[18px] h-[18px]" aria-hidden="true" />}
+                label="Managed assets"
+                value={entAssets.length}
+                context={`${entAssets.filter((a) => a.criticality === "CRITICAL").length} critical · ${new Set(entAssets.map((a) => a.regionLabel)).size} regions`}
+                accent="accent"
+                link={{ to: "/app/enterprise", label: "Asset portfolio" }}
+              />
+              <MetricCard
+                icon={<AlertOctagon className="w-[18px] h-[18px]" aria-hidden="true" />}
+                label="Non-compliant assets"
+                value={entAssets.filter((a) => (a.complianceScore ?? 100) < 100).length}
+                context={`${entAssets.length - entAssets.filter((a) => (a.complianceScore ?? 100) < 100).length} fully compliant`}
+                accent={entAssets.some((a) => (a.complianceScore ?? 100) < 100) ? "warn" : "ok"}
+                link={{ to: "/app/enterprise/remediation", label: "Remediation queue" }}
+              />
+              <MetricCard
+                icon={<Cable className="w-[18px] h-[18px]" aria-hidden="true" />}
+                label="Connectors online"
+                value={entConnectors.filter((c) => c.status === "ONLINE").length}
+                context={`${entConnectors.length} connectors total`}
+                accent={entConnectors.some((c) => c.status === "ONLINE") ? "ok" : "danger"}
+                link={{ to: "/app/enterprise/connectors", label: "Connector health" }}
+              />
+              <MetricCard
+                icon={<Wrench className="w-[18px] h-[18px]" aria-hidden="true" />}
+                label="Remediations"
+                value={entRems.filter((r) => r.status === "VERIFIED").length}
+                context={`${entRems.length} planned · ${entRems.filter((r) => r.status === "COMPLETED" || r.status === "VERIFIED").length} executed`}
+                accent="accent"
+                link={{ to: "/app/enterprise/remediation", label: "Closed-loop pipeline" }}
+              />
             </div>
           </div>
         </Reveal>

@@ -13,6 +13,7 @@ import { redactSecrets } from "../utils/redact";
 import { uniqueId } from "../utils/helpers";
 import { reviewsRouter } from "./reviews";
 import { governanceRouter } from "./governance";
+import { enterpriseRouter } from "./enterprise";
 import { SYSTEM_REVIEWER } from "../services/auth";
 import { isAuditSealed } from "../services/reviewService";
 
@@ -20,6 +21,7 @@ export const apiRouter = Router();
 
 apiRouter.use(governanceRouter);
 apiRouter.use(reviewsRouter);
+apiRouter.use(enterpriseRouter);
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_EXTENSIONS = ["conf", "cfg", "config", "txt"];

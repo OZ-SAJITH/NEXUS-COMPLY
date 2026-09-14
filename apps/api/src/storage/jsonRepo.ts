@@ -9,6 +9,11 @@ import type {
   FindingReviewRecord,
   AuditEventRecord,
   ComplianceFinalization,
+  AssetRecord,
+  ConnectorRecord,
+  EvidenceRecord,
+  AssetScanRecord,
+  RemediationRecord,
 } from "@nexus/shared-types";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -22,6 +27,11 @@ export interface DbShape {
   findingReviews: FindingReviewRecord[];
   auditEvents: AuditEventRecord[];
   finalizations: ComplianceFinalization[];
+  assets: AssetRecord[];
+  connectors: ConnectorRecord[];
+  evidence: EvidenceRecord[];
+  assetScans: AssetScanRecord[];
+  remediations: RemediationRecord[];
 }
 
 /**
@@ -50,9 +60,14 @@ export class JsonRepository {
         findingReviews: parsed.findingReviews ?? [],
         auditEvents: parsed.auditEvents ?? [],
         finalizations: parsed.finalizations ?? [],
+        assets: parsed.assets ?? [],
+        connectors: parsed.connectors ?? [],
+        evidence: parsed.evidence ?? [],
+        assetScans: parsed.assetScans ?? [],
+        remediations: parsed.remediations ?? [],
       };
     } catch {
-      this.cache = { configurations: [], audits: [], approvedMappings: [], users: [], findingReviews: [], auditEvents: [], finalizations: [] };
+      this.cache = { configurations: [], audits: [], approvedMappings: [], users: [], findingReviews: [], auditEvents: [], finalizations: [], assets: [], connectors: [], evidence: [], assetScans: [], remediations: [] };
     }
     return this.cache;
   }
@@ -131,7 +146,7 @@ export class JsonRepository {
   }
 
   async reset(): Promise<void> {
-    this.cache = { configurations: [], audits: [], approvedMappings: [], users: [], findingReviews: [], auditEvents: [], finalizations: [] };
+    this.cache = { configurations: [], audits: [], approvedMappings: [], users: [], findingReviews: [], auditEvents: [], finalizations: [], assets: [], connectors: [], evidence: [], assetScans: [], remediations: [] };
     await this.save(this.cache);
   }
 
@@ -239,6 +254,153 @@ export class JsonRepository {
     else db.finalizations.push(finalization);
     await this.save(db);
     return finalization;
+  }
+
+  // ---- Assets ----
+  async allAssets(): Promise<AssetRecord[]> {
+    const db = await this.load();
+    return db.assets;
+  }
+
+  async getAsset(id: string): Promise<AssetRecord | undefined> {
+    const db = await this.load();
+    return db.assets.find((a) => a.id === id);
+  }
+
+  async saveAsset(asset: AssetRecord): Promise<AssetRecord> {
+    const db = await this.load();
+    const idx = db.assets.findIndex((a) => a.id === asset.id);
+    if (idx >= 0) db.assets[idx] = asset;
+    else db.assets.push(asset);
+    await this.save(db);
+    return asset;
+  }
+
+  async saveAssets(assets: AssetRecord[]): Promise<AssetRecord[]> {
+    const db = await this.load();
+    const existing = new Map(db.assets.map((a) => [a.id, a]));
+    for (const asset of assets) existing.set(asset.id, asset);
+    db.assets = Array.from(existing.values());
+    await this.save(db);
+    return db.assets;
+  }
+
+  // ---- Connectors ----
+  async allConnectors(): Promise<ConnectorRecord[]> {
+    const db = await this.load();
+    return db.connectors;
+  }
+
+  async getConnector(id: string): Promise<ConnectorRecord | undefined> {
+    const db = await this.load();
+    return db.connectors.find((c) => c.id === id);
+  }
+
+  async saveConnector(connector: ConnectorRecord): Promise<ConnectorRecord> {
+    const db = await this.load();
+    const idx = db.connectors.findIndex((c) => c.id === connector.id);
+    if (idx >= 0) db.connectors[idx] = connector;
+    else db.connectors.push(connector);
+    await this.save(db);
+    return connector;
+  }
+
+  async saveConnectors(connectors: ConnectorRecord[]): Promise<ConnectorRecord[]> {
+    const db = await this.load();
+    const existing = new Map(db.connectors.map((c) => [c.id, c]));
+    for (const c of connectors) existing.set(c.id, c);
+    db.connectors = Array.from(existing.values());
+    await this.save(db);
+    return db.connectors;
+  }
+
+  // ---- Evidence ----
+  async allEvidence(): Promise<EvidenceRecord[]> {
+    const db = await this.load();
+    return db.evidence;
+  }
+
+  async evidenceForAsset(assetId: string): Promise<EvidenceRecord[]> {
+    const db = await this.load();
+    return db.evidence.filter((e) => e.assetId === assetId).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }
+
+  async evidenceForFinding(findingId: string): Promise<EvidenceRecord[]> {
+    const db = await this.load();
+    return db.evidence.filter((e) => e.findingId === findingId).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }
+
+  async getEvidence(id: string): Promise<EvidenceRecord | undefined> {
+    const db = await this.load();
+    return db.evidence.find((e) => e.id === id);
+  }
+
+  async saveEvidence(record: EvidenceRecord): Promise<EvidenceRecord> {
+    const db = await this.load();
+    const idx = db.evidence.findIndex((e) => e.id === record.id);
+    if (idx >= 0) db.evidence[idx] = record;
+    else db.evidence.push(record);
+    await this.save(db);
+    return record;
+  }
+
+  async saveEvidenceBatch(records: EvidenceRecord[]): Promise<EvidenceRecord[]> {
+    const db = await this.load();
+    const existing = new Map(db.evidence.map((e) => [e.id, e]));
+    for (const r of records) existing.set(r.id, r);
+    db.evidence = Array.from(existing.values());
+    await this.save(db);
+    return db.evidence;
+  }
+
+  // ---- Asset scans ----
+  async allAssetScans(): Promise<AssetScanRecord[]> {
+    const db = await this.load();
+    return db.assetScans;
+  }
+
+  async scansForAsset(assetId: string): Promise<AssetScanRecord[]> {
+    const db = await this.load();
+    return db.assetScans.filter((s) => s.assetId === assetId).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
+  async getAssetScan(id: string): Promise<AssetScanRecord | undefined> {
+    const db = await this.load();
+    return db.assetScans.find((s) => s.id === id);
+  }
+
+  async saveAssetScan(scan: AssetScanRecord): Promise<AssetScanRecord> {
+    const db = await this.load();
+    const idx = db.assetScans.findIndex((s) => s.id === scan.id);
+    if (idx >= 0) db.assetScans[idx] = scan;
+    else db.assetScans.push(scan);
+    await this.save(db);
+    return scan;
+  }
+
+  // ---- Remediations ----
+  async allRemediations(): Promise<RemediationRecord[]> {
+    const db = await this.load();
+    return db.remediations;
+  }
+
+  async remediationsForAsset(assetId: string): Promise<RemediationRecord[]> {
+    const db = await this.load();
+    return db.remediations.filter((r) => r.assetId === assetId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async getRemediation(id: string): Promise<RemediationRecord | undefined> {
+    const db = await this.load();
+    return db.remediations.find((r) => r.id === id);
+  }
+
+  async saveRemediation(remediation: RemediationRecord): Promise<RemediationRecord> {
+    const db = await this.load();
+    const idx = db.remediations.findIndex((r) => r.id === remediation.id);
+    if (idx >= 0) db.remediations[idx] = remediation;
+    else db.remediations.push(remediation);
+    await this.save(db);
+    return remediation;
   }
 }
 

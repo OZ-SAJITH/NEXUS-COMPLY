@@ -48,6 +48,7 @@ import {
   getFrameworkEvaluation,
   getFrameworkMappings,
 } from "../demo/governanceStore";
+import { enterpriseDemo } from "../demo/enterpriseStore";
 
 type Handler = (body: unknown, query: URLSearchParams, match: RegExpMatchArray) => unknown;
 
@@ -127,9 +128,50 @@ const HANDLERS: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   { method: "GET", pattern: /^\/governance\/freeze$/, handler: () => getFreeze() },
   { method: "POST", pattern: /^\/governance\/freeze$/, handler: (body) => setChangeFreeze((body as { active: boolean })?.active ?? false, (body as { reason?: string })?.reason) },
   { method: "GET", pattern: /^\/governance\/audit-trail$/, handler: () => ({ items: getGovernanceTrail() }) },
+
+  // ---- Enterprise Compliance & Remediation ----
+  { method: "GET", pattern: /^\/assets$/, handler: () => enterpriseDemo.listAssets() },
+  { method: "GET", pattern: /^\/assets\/([^/]+)$/, handler: (_b, _q, m) => need(enterpriseDemo.assetById(m[1]), "Asset not found") },
+  { method: "POST", pattern: /^\/assets\/discover$/, handler: () => enterpriseDemo.discover() },
+  { method: "POST", pattern: /^\/assets\/([^/]+)\/scan$/, handler: (body, _q, m) => enterpriseDemo.scan(m[1], (body as { trigger?: "manual" | "auto_verify" | "scheduled" })?.trigger ?? "manual") },
+  { method: "GET", pattern: /^\/assets\/([^/]+)\/evidence$/, handler: (_b, _q, m) => enterpriseDemo.assetEvidence(m[1]) },
+  { method: "GET", pattern: /^\/assets\/([^/]+)\/connector$/, handler: (_b, _q, m) => enterpriseDemo.assetConnectorProfile(m[1]) },
+  { method: "POST", pattern: /^\/assets\/([^/]+)\/connector\/test$/, handler: (_b, _q, m) => enterpriseDemo.testAssetConnector(m[1]) },
+  { method: "GET", pattern: /^\/assets\/([^/]+)\/evidence\/([^/]+)$/, handler: (_b, _q, m) => enterpriseDemo.assetEvidenceDetail(m[1], m[2]) },
+  { method: "GET", pattern: /^\/assets\/([^/]+)\/findings$/, handler: (_b, _q, m) => need(enterpriseDemo.assetFindings(m[1]), "Asset not found") },
+  { method: "GET", pattern: /^\/assets\/([^/]+)\/scans$/, handler: (_b, _q, m) => enterpriseDemo.assetScans(m[1]) },
+  { method: "GET", pattern: /^\/assets\/([^/]+)\/impact$/, handler: (_b, _q, m) => enterpriseDemo.assetImpact(m[1]) },
+  { method: "GET", pattern: /^\/enterprise\/topology$/, handler: () => enterpriseDemo.topology() },
+  { method: "GET", pattern: /^\/connectors$/, handler: () => enterpriseDemo.listConnectors() },
+  { method: "GET", pattern: /^\/connectors\/([^/]+)\/health$/, handler: (_b, _q, m) => {
+      const c = need(enterpriseDemo.connectorById(m[1]), "Connector not found");
+      return { id: c.id, status: c.status, lastContactAt: c.lastContactAt, message: c.status === "ONLINE" ? "Healthy" : c.connectError ?? "Unavailable" };
+    } },
+  { method: "GET", pattern: /^\/connectors\/([^/]+)$/, handler: (_b, _q, m) => need(enterpriseDemo.connectorById(m[1]), "Connector not found") },
+  { method: "POST", pattern: /^\/connectors\/([^/]+)\/test$/, handler: (_b, _q, m) => enterpriseDemo.testConnector(m[1]) },
+  { method: "GET", pattern: /^\/evidence\/([^/]+)$/, handler: (_b, _q, m) => need(enterpriseDemo.evidenceById(m[1]), "Evidence record not found") },
+  { method: "GET", pattern: /^\/asset-controls$/, handler: () => enterpriseDemo.controls() },
+  { method: "GET", pattern: /^\/frameworks$/, handler: () => enterpriseDemo.frameworks() },
+  { method: "POST", pattern: /^\/findings\/([^/]+)\/analyze$/, handler: (_b, _q, m) => enterpriseDemo.analyze(m[1]) },
+  { method: "GET", pattern: /^\/remediations$/, handler: () => enterpriseDemo.remediations() },
+  { method: "POST", pattern: /^\/remediations$/, handler: (body) => enterpriseDemo.createRemediation((body as { findingId: string })?.findingId ?? "", (body as { reason?: string })?.reason) },
+  { method: "GET", pattern: /^\/remediations\/([^/]+)$/, handler: (_b, _q, m) => need(enterpriseDemo.remediationById(m[1]), "Remediation not found") },
+  { method: "POST", pattern: /^\/remediations\/([^/]+)\/validate$/, handler: (_b, _q, m) => enterpriseDemo.validateRemediation(m[1]) },
+  { method: "POST", pattern: /^\/remediations\/([^/]+)\/request-approval$/, handler: (_b, _q, m) => enterpriseDemo.requestApproval(m[1]) },
+  { method: "POST", pattern: /^\/remediations\/([^/]+)\/approve$/, handler: (body, _q, m) => enterpriseDemo.approve(m[1], (body as { comment?: string })?.comment) },
+  { method: "POST", pattern: /^\/remediations\/([^/]+)\/reject$/, handler: (body, _q, m) => enterpriseDemo.reject(m[1], (body as { reason?: string })?.reason) },
+  { method: "POST", pattern: /^\/remediations\/([^/]+)\/execute$/, handler: (_b, _q, m) => enterpriseDemo.execute(m[1]) },
+  { method: "POST", pattern: /^\/remediations\/([^/]+)\/verify$/, handler: (_b, _q, m) => enterpriseDemo.verify(m[1]) },
+  { method: "POST", pattern: /^\/remediations\/([^/]+)\/rollback$/, handler: (body, _q, m) => enterpriseDemo.rollback(m[1], (body as { reason?: string })?.reason) },
+  { method: "GET", pattern: /^\/audit$/, handler: () => enterpriseDemo.auditEvents() },
 ];
 
 type ApprovalDecision = "APPROVED" | "REJECTED" | "CHANGES_REQUESTED";
+
+function need<T>(value: T | undefined, message: string): T {
+  if (value === undefined) throw new DemoApiError(404, message);
+  return value;
+}
 
 function toParams(query: URLSearchParams): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {};

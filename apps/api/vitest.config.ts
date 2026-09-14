@@ -7,6 +7,7 @@ export default defineConfig({
       "@nexus/shared-types": path.resolve(__dirname, "../../packages/shared-types/src/index.ts"),
       "@nexus/security-intent": path.resolve(__dirname, "../../packages/security-intent/src/index.ts"),
       "@nexus/compliance-rules": path.resolve(__dirname, "../../packages/compliance-rules/src/index.ts"),
+      "@nexus/enterprise-catalog": path.resolve(__dirname, "../../packages/enterprise-catalog/src/index.ts"),
     },
   },
   test: {

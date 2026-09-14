@@ -33,6 +33,10 @@ import {
   ScrollText,
   FlaskConical,
   Activity,
+  LayoutGrid,
+  Cable,
+  Wrench,
+  Map,
   type LucideIcon,
 } from "lucide-react";
 import { AnimatedNexusLogo, type NexusLogoState } from "./motion/AnimatedNexusLogo";
@@ -113,6 +117,16 @@ const NAV: NavSection[] = [
       { to: "/app/governance/vendors", label: "Vendor Risk", icon: Boxes },
       { to: "/app/governance/audit-trail", label: "Audit Trail", icon: ScrollText },
       { to: "/app/governance/drift", label: "Drift", icon: Activity },
+    ],
+  },
+  {
+    title: "Enterprise",
+    items: [
+      { to: "/app/enterprise", label: "Portfolio", icon: LayoutGrid, end: true },
+      { to: "/app/enterprise/topology", label: "Topology", icon: Map },
+      { to: "/app/enterprise/connectors", label: "Connectors", icon: Cable },
+      { to: "/app/enterprise/remediation", label: "Remediation", icon: Wrench },
+      { to: "/app/enterprise/audit", label: "Audit Trail", icon: ScrollText },
     ],
   },
   {

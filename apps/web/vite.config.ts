@@ -29,6 +29,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@nexus/shared-types": path.resolve(__dirname, "../../packages/shared-types/src/index.ts"),
+      "@nexus/enterprise-catalog": path.resolve(__dirname, "../../packages/enterprise-catalog/src/index.ts"),
     },
   },
   server: {

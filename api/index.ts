@@ -8,7 +8,7 @@
  */
 import "dotenv/config";
 import { createApp } from "../apps/api/src/app";
-import { seedIfEmpty } from "../apps/api/src/services/seed";
+import { seedIfEmpty, seedEnterpriseIfEmpty } from "../apps/api/src/services/seed";
 import { backfillReviewData } from "../apps/api/src/services/reviewService";
 import express from "express";
 
@@ -28,6 +28,7 @@ function warmup(): Promise<void> {
   warming ??= (async () => {
     try {
       await seedIfEmpty();
+      await seedEnterpriseIfEmpty();
       await backfillReviewData();
     } catch (err) {
       console.error("[vercel] warmup failed", err);

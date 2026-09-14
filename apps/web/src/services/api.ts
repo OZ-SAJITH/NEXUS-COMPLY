@@ -31,7 +31,30 @@ import type {
   FrameworkApplicability,
   PolicyConflict,
   FrameworkMappings,
+  AssetFinding,
+  AssetRecord,
+  AssetScanRecord,
+  AssetConnectorProfile,
+  AuditEventRecord as EnterpriseAuditEventRecord,
+  ConnectorRecord,
+  ConnectorTestResult,
+  EvidenceRecord,
+  EvidenceWithVerification,
+  FindingAnalysis,
+  RemediationRecord,
 } from "@nexus/shared-types";
+
+export interface EnterpriseTopology {
+  regions: Array<{
+    code: string;
+    label: string;
+    flag?: string;
+    sites: Array<{ id: string; label: string; region: string; timezone: string; zones: string[]; assets?: number }>;
+  }>;
+  tiers: Array<{ tier: string; title: string; description?: string; color?: string }>;
+  connections: Array<{ from?: string; to?: string; fromAsset?: string; toAsset?: string; type?: string; status?: string }>;
+  generatedAt: string;
+}
 
 import { DEMO_MODE, API_BASE, ApiConfigurationError, apiEndpoint } from "./apiConfig";
 import { dispatchDemo, demoReportUrl } from "./demoApi";
@@ -270,5 +293,47 @@ export const api = {
     freeze: () => request<{ active: boolean; reason?: string; until?: string; triggeredAt?: string }>("/governance/freeze"),
     setFreeze: (active: boolean, reason?: string) => request<{ active: boolean; reason?: string; until?: string; triggeredAt?: string }>("/governance/freeze", { method: "POST", body: JSON.stringify({ active, reason }) }),
     auditTrail: () => request<{ items: GovernanceAuditEvent[] }>("/governance/audit-trail"),
+  },
+
+  // ---- Enterprise Compliance & Remediation ----
+  enterprise: {
+    assets: () => request<AssetRecord[]>("/assets"),
+    asset: (id: string) => request<AssetRecord>(`/assets/${id}`),
+    discover: () => request<{ assets: AssetRecord[]; discovered: number; updated: number; runId: string }>("/assets/discover", { method: "POST", body: JSON.stringify({}) }),
+    scan: (id: string, trigger: "manual" | "auto_verify" | "scheduled" = "manual") =>
+      request<AssetScanRecord>(`/assets/${id}/scan`, { method: "POST", body: JSON.stringify({ trigger }) }),
+    assetEvidence: (id: string) => request<EvidenceRecord[]>(`/assets/${id}/evidence`),
+    assetFindings: (id: string) => request<AssetFinding[]>(`/assets/${id}/findings`),
+    assetScans: (id: string) => request<AssetScanRecord[]>(`/assets/${id}/scans`),
+    assetImpact: (id: string) => request<unknown>(`/assets/${id}/impact`),
+    assetConnector: (id: string) => request<AssetConnectorProfile>(`/assets/${id}/connector`),
+    testAssetConnector: (id: string) => request<ConnectorTestResult>(`/assets/${id}/connector/test`, { method: "POST", body: JSON.stringify({}) }),
+    assetEvidenceDetail: (assetId: string, evidenceId: string) => request<EvidenceWithVerification>(`/assets/${assetId}/evidence/${evidenceId}`),
+    topology: () => request<EnterpriseTopology>("/enterprise/topology"),
+    connectors: () => request<ConnectorRecord[]>("/connectors"),
+    connector: (id: string) => request<ConnectorRecord>(`/connectors/${id}`),
+    connectorHealth: (id: string) => request<{ id: string; status: string; lastContactAt?: string; message?: string }>(`/connectors/${id}/health`),
+    testConnector: (id: string) => request<ConnectorRecord>(`/connectors/${id}/test`, { method: "POST", body: JSON.stringify({}) }),
+    evidenceById: (id: string) => request<EvidenceRecord>(`/evidence/${id}`),
+    assetControls: () => request<Array<{ controlId: string; name: string; severity: string; expected: string; remediation?: string }>>("/asset-controls"),
+    frameworks: () => request<{ labels: Record<string, string>; controls: unknown[] }>("/frameworks"),
+    analyzeFinding: (findingId: string) => request<FindingAnalysis>(`/findings/${findingId}/analyze`, { method: "POST", body: JSON.stringify({}) }),
+    remediations: () => request<RemediationRecord[]>("/remediations"),
+    remediation: (id: string) => request<RemediationRecord>(`/remediations/${id}`),
+    createRemediation: (findingId: string, reason?: string) =>
+      request<RemediationRecord>("/remediations", { method: "POST", body: JSON.stringify({ findingId, reason }) }),
+    validateRemediation: (id: string) => request<RemediationRecord>(`/remediations/${id}/validate`, { method: "POST", body: JSON.stringify({}) }),
+    requestRemediationApproval: (id: string) => request<RemediationRecord>(`/remediations/${id}/request-approval`, { method: "POST", body: JSON.stringify({}) }),
+    approveRemediation: (id: string, comment?: string) =>
+      request<RemediationRecord>(`/remediations/${id}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
+    rejectRemediation: (id: string, reason?: string) =>
+      request<RemediationRecord>(`/remediations/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+    executeRemediation: (id: string, executor?: string) =>
+      request<RemediationRecord>(`/remediations/${id}/execute`, { method: "POST", body: JSON.stringify({ executor }) }),
+    verifyRemediation: (id: string, verifier?: string) =>
+      request<RemediationRecord>(`/remediations/${id}/verify`, { method: "POST", body: JSON.stringify({ verifier }) }),
+    rollbackRemediation: (id: string, reason?: string) =>
+      request<RemediationRecord>(`/remediations/${id}/rollback`, { method: "POST", body: JSON.stringify({ reason }) }),
+    audit: () => request<EnterpriseAuditEventRecord[]>("/audit"),
   },
 };

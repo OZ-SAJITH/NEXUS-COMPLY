@@ -217,6 +217,37 @@ export interface DashboardStats {
     totalAudits: number;
   };
   review: ReviewAggregate;
+  assets?: {
+    total: number;
+    byType: Array<{ type: AssetType; count: number }>;
+    byStatus: Array<{ status: AssetStatus; count: number }>;
+    byTier: Array<{ tier: NetworkTier; count: number }>;
+    byRegion: Array<{ region: string; label: string; count: number }>;
+    discovered: number;
+    monitored: number;
+    scannable: number;
+    nonCompliant: number;
+    compliant: number;
+  };
+  connectors?: {
+    total: number;
+    online: number;
+    offline: number;
+    authFailed: number;
+    networkBlocked: number;
+    byType: Array<{ type: ConnectorType; count: number }>;
+  };
+  remediation?: {
+    planned: number;
+    pendingApproval: number;
+    executed: number;
+    completed: number;
+    verifiedPass: number;
+    verificationFail: number;
+    rolledBack: number;
+    verificationSuccessRate: number;
+  };
+  globalPosture?: AssetPostureSummary;
 }
 
 export interface DemoConfigInfo {
@@ -331,14 +362,28 @@ export type AuditEventType =
   | "AUDIT_FINALIZED"
   | "AI_INTERPRETATION_APPROVED"
   | "AI_INTERPRETATION_REJECTED"
-  | "AI_INTERPRETATION_EDITED";
+  | "AI_INTERPRETATION_EDITED"
+  | "ASSET_DISCOVERED"
+  | "ASSET_UPDATED"
+  | "ASSET_SCANNED"
+  | "EVIDENCE_COLLECTED"
+  | "FINDING_ANALYZED"
+  | "REMEDIATION_PLANNED"
+  | "REMEDIATION_VALIDATED"
+  | "REMEDIATION_APPROVED"
+  | "REMEDIATION_REJECTED"
+  | "REMEDIATION_EXECUTED"
+  | "REMEDIATION_VERIFICATION_PASSED"
+  | "REMEDIATION_VERIFICATION_FAILED"
+  | "REMEDIATION_ROLLED_BACK"
+  | "CONNECTOR_STATUS_CHANGED";
 
 export type AuditEventSource = "system" | "ai" | "human";
 
 export interface AuditEventRecord {
   id: string;
   eventType: AuditEventType;
-  entityType: "finding" | "audit" | "ai_interpretation";
+  entityType: "finding" | "audit" | "ai_interpretation" | "asset" | "evidence" | "remediation" | "connector";
   entityId: string;
   findingId?: string;
   auditId: string;
@@ -1134,4 +1179,577 @@ export interface FrameworkMappings {
   applicable: FrameworkApplicability;
   controlCount: number;
   controls: FrameworkControlMapping[];
+}
+
+// ---------------------------------------------------------------------------
+// Enterprise Asset Management — unified multi-vendor asset model
+// ---------------------------------------------------------------------------
+
+export type AssetType =
+  | "NETWORK_DEVICE"
+  | "ROUTER"
+  | "SWITCH"
+  | "FIREWALL"
+  | "PROXY"
+  | "SERVER"
+  | "VIRTUAL_MACHINE"
+  | "DATABASE"
+  | "APPLICATION"
+  | "API"
+  | "MESSAGE_QUEUE"
+  | "CLOUD_RESOURCE"
+  | "LOAD_BALANCER"
+  | "CERTIFICATE"
+  | "OTHER";
+
+export type AssetEnvironment = "PROD_SIM" | "PRODUCTION" | "STAGING" | "DEVELOPMENT" | "DR";
+
+export type AssetStatus =
+  | "DISCOVERED"
+  | "IDENTIFIED"
+  | "CONNECTABLE"
+  | "SCANNABLE"
+  | "MONITORED"
+  | "NON_COMPLIANT"
+  | "COMPLIANT";
+
+export type AssetCriticality = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type NetworkTier = "TIER_1" | "TIER_2" | "TIER_3";
+
+export type ConnectionStatus = "ALLOWED" | "BLOCKED" | "MONITORED";
+
+export interface AssetLocationRef {
+  region: string;
+  site: string;
+  networkZone: string;
+  tier: NetworkTier;
+}
+
+export interface AssetRelationship {
+  id: string;
+  fromAssetId: string;
+  toAssetId: string;
+  relation: "serves" | "dependsOn" | "hosts" | "fronts" | "connectsTo";
+  source?: string;
+  destination?: string;
+  protocol?: string;
+  port?: number;
+  networkZone?: string;
+  status: ConnectionStatus;
+  encrypted?: boolean;
+}
+
+export interface AssetEvent {
+  at: string;
+  action: string;
+  actor: string;
+  detail?: string;
+}
+
+export interface AssetStateHistoryEntry {
+  at: string;
+  label: string;
+  state: Record<string, unknown>;
+}
+
+export type ConnectorType =
+  | "NETWORK"
+  | "SERVER"
+  | "DATABASE"
+  | "APPLICATION"
+  | "FIREWALL"
+  | "MESSAGE_QUEUE"
+  | "CLOUD";
+
+export type ConnectorStatus = "ONLINE" | "OFFLINE" | "AUTHENTICATION_FAILED" | "NETWORK_BLOCKED";
+
+export interface AssetRecord {
+  id: string;
+  name: string;
+  assetType: AssetType;
+  vendor: string;
+  technology: string;
+  environment: AssetEnvironment;
+  location: AssetLocationRef;
+  siteLabel: string;
+  regionLabel: string;
+  hostname: string;
+  ipAddress: string;
+  status: AssetStatus;
+  discoveryStatus: AssetStatus;
+  criticality: AssetCriticality;
+  connectorType: ConnectorType;
+  lastDiscoveredAt?: string;
+  lastScannedAt?: string;
+  complianceStatus?: FindingStatus;
+  complianceScore?: number;
+  riskScore?: number;
+  riskBand?: RiskBand;
+  observedState: Record<string, unknown>;
+  stateHistory: AssetStateHistoryEntry[];
+  relationships: AssetRelationship[];
+  history: AssetEvent[];
+  tags?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Connectors
+// ---------------------------------------------------------------------------
+
+export type RemediationActionType =
+  | "SET_TLS_MIN_VERSION"
+  | "REVOKE_AND_RENEW_CERTIFICATE"
+  | "DISABLE_INSECURE_PROTOCOL"
+  | "ENFORCE_STRONG_CIPHERS"
+  | "ENABLE_DB_ENCRYPTION"
+  | "RESTRICT_DB_BIND"
+  | "CONSOLIDATE_FIREWALL_RULE"
+  | "ENFORCE_STRONG_AUTH"
+  | "ENABLE_INTEGRITY_VALIDATION"
+  | "ENABLE_XML_SIGNATURE_VALIDATION"
+  | "SECURE_API_CONFIG"
+  | "ROTATE_AND_SCREEN_SECRETS"
+  | "RESTRICT_PRIVILEGED_ACCESS"
+  | "UPGRADE_SERVICE_VERSION"
+  | "RESTORE_BASELINE_HASH"
+  | "SECURE_MESSAGE_QUEUE";
+
+export interface ConnectorRecord {
+  id: string;
+  type: ConnectorType;
+  name: string;
+  vendor: string;
+  version: string;
+  status: ConnectorStatus;
+  lastContactAt?: string;
+  simulated: true;
+  authorizedActions: RemediationActionType[];
+  supportedAssetTypes: AssetType[];
+  connectError?: string;
+  /** Transport the adapter uses to reach the managed system (SSH/SNMP/HTTPS/...). */
+  transportType?: string;
+  /** Wire protocol spoken by the connector (HTTPS, SNMP, postgresql, AMQP, ...). */
+  protocol?: string;
+  /** Declared inspection capabilities — the connector must not claim unsupported ones. */
+  capabilities?: string[];
+  /** Last measured replica round-trip latency in milliseconds. */
+  latencyMs?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Connector test results (PHASE 2 — connector + evidence architecture)
+// ---------------------------------------------------------------------------
+
+export interface ConnectorTestResult {
+  ok: boolean;
+  connectorId: string;
+  connector: string;
+  vendor: string;
+  protocol?: string;
+  transportType?: string;
+  status: ConnectorStatus;
+  latencyMs: number;
+  connectorVersion: string;
+  capabilities: string[];
+  at: string;
+}
+
+export interface AssetConnectorProfile {
+  assetId: string;
+  assetName: string;
+  online: boolean;
+  connector?: ConnectorRecord;
+  latencyMs: number;
+  fromCapabilities: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Normalized evidence
+// ---------------------------------------------------------------------------
+
+export type EvidenceType =
+  | "CONFIGURATION"
+  | "API_RESPONSE"
+  | "HANDSHAKE"
+  | "CERTIFICATE"
+  | "PORT_SCAN"
+  | "SYSTEM_OUTPUT"
+  | "SCHEMA_METADATA"
+  | "HTTP_HEADER"
+  | "PACKAGE_METADATA"
+  | "NETWORK"
+  | "TLS"
+  | "FIREWALL"
+  | "ACL"
+  | "AUTHENTICATION"
+  | "CRYPTOGRAPHY"
+  | "INTEGRITY"
+  | "LOG"
+  | "SYSTEM";
+
+/**
+ * Re-computed SHA-256 integrity check. `verified` is derived by re-hashing the
+ * canonical evidence payload stored on the record — never fabricated.
+ */
+export interface EvidenceVerification {
+  hash: string;
+  verified: boolean;
+  canonical: string;
+  verifiedAt: string;
+}
+
+export type EvidenceWithVerification = EvidenceRecord & { verification: EvidenceVerification };
+
+export interface EvidenceRecord {
+  id: string;
+  evidenceId: string;
+  assetId: string;
+  controlId: string;
+  findingId?: string;
+  scanId?: string;
+  source: string;
+  observedValue: string;
+  expectedValue: string;
+  evidenceType: EvidenceType;
+  timestamp: string;
+  status: FindingStatus;
+  rawReference: string;
+  confidence: number;
+  integrityHash: string;
+  collector: string;
+  simulated: true;
+  detail: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Asset scans, findings, risk explanation
+// ---------------------------------------------------------------------------
+
+export interface RiskFactorDetail {
+  factor: "severity" | "exposure" | "criticality" | "importance" | "exploitability";
+  label: string;
+  weight: number;
+  value: number;
+  contribution: number;
+  reason: string;
+}
+
+export interface RiskExplanation {
+  score: number;
+  band: RiskBand;
+  factors: RiskFactorDetail[];
+  summary: string;
+}
+
+export interface AssetFinding extends Finding {
+  assetId: string;
+  evidenceIds: string[];
+  assetType: AssetType;
+  location?: AssetLocationRef;
+  riskExplanation?: RiskExplanation;
+}
+
+export interface AssetScanRecord {
+  id: string;
+  assetId: string;
+  assetName: string;
+  connectorType: ConnectorType;
+  environment: AssetEnvironment;
+  status: "RUNNING" | "COMPLETED" | "ERROR";
+  startedAt: string;
+  completedAt?: string;
+  findings: AssetFinding[];
+  risk?: RiskAssessment | null;
+  compliance?: { passed: number; failed: number; warnings: number; na: number; score: number } | null;
+  evidenceIds: string[];
+  trigger?: "manual" | "auto_verify" | "scheduled";
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Remediation orchestration
+// ---------------------------------------------------------------------------
+
+export interface RemediationActionProposal {
+  actionType: RemediationActionType;
+  displayName: string;
+  parameters: Record<string, unknown>;
+  reason: string;
+  expectedResult: string;
+  impact: "LOW" | "MEDIUM" | "HIGH";
+  rollbackAvailable: boolean;
+}
+
+export type ValidationStatus = "PENDING" | "PASS" | "FAIL";
+
+export type RemediationStatus =
+  | "PLANNED"
+  | "VALIDATED"
+  | "VALIDATION_FAILED"
+  | "PENDING_APPROVAL"
+  | "APPROVED"
+  | "REJECTED"
+  | "EXECUTING"
+  | "COMPLETED"
+  | "FAILED"
+  | "VERIFYING"
+  | "VERIFIED"
+  | "ROLLING_BACK"
+  | "ROLLED_BACK";
+
+export type ExecStatus = "STARTED" | "VALIDATING" | "EXECUTING" | "COMPLETED" | "FAILED";
+
+export interface RemediationValidationResult {
+  status: ValidationStatus;
+  beforeState: Record<string, unknown>;
+  proposedState: Record<string, unknown>;
+  expectedResult: string;
+  simulatedOutput: string;
+  message: string;
+  at: string;
+}
+
+export interface RemediationApprovalRecord {
+  status: "APPROVED" | "REJECTED";
+  approverName: string;
+  approverRole: string;
+  comment?: string;
+  at: string;
+}
+
+export interface RemediationExecutionLogEntry {
+  at: string;
+  level: "INFO" | "WARN" | "ERROR";
+  message: string;
+}
+
+export interface RemediationExecutionResult {
+  status: ExecStatus;
+  startedAt: string;
+  completedAt?: string;
+  logs: RemediationExecutionLogEntry[];
+  action: RemediationActionType;
+  appliedTo: string;
+  message?: string;
+}
+
+export interface RemediationVerificationResult {
+  status: "PASS" | "FAIL";
+  environment: AssetEnvironment;
+  before: { findingStatus: FindingStatus; riskScore: number; riskBand: RiskBand; compliance: string };
+  after: { findingStatus: FindingStatus; riskScore: number; riskBand: RiskBand; compliance: string };
+  evidenceBeforeIds: string[];
+  evidenceAfterIds: string[];
+  triggeredBy: string;
+  at: string;
+}
+
+export interface RemediationRollbackResult {
+  available: boolean;
+  triggered: boolean;
+  status: "NOT_NEEDED" | "ROLLING_BACK" | "ROLLED_BACK" | "SKIPPED";
+  reason?: string;
+  restoredState?: Record<string, unknown>;
+  at?: string;
+}
+
+export interface RemediationRecord {
+  id: string;
+  findingId: string;
+  assetId: string;
+  assetName: string;
+  controlId: string;
+  controlName: string;
+  title: string;
+  reason: string;
+  riskScore: number;
+  riskBand: RiskBand;
+  proposedAction: RemediationActionProposal;
+  status: RemediationStatus;
+  environment: AssetEnvironment;
+  validation?: RemediationValidationResult;
+  approval?: RemediationApprovalRecord;
+  execution?: RemediationExecutionResult;
+  verification?: RemediationVerificationResult;
+  rollback?: RemediationRollbackResult;
+  auditEventIds: string[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Findings AI analysis (grounded in available evidence)
+// ---------------------------------------------------------------------------
+
+export interface FindingAnalysis {
+  findingId: string;
+  findingTitle: string;
+  controlId: string;
+  severity: Severity;
+  riskScore: number;
+  riskBand: RiskBand;
+  assetName: string;
+  assetType: AssetType;
+  environment: AssetEnvironment;
+  provider: AiProviderMode;
+  model?: string;
+  analysis: {
+    explanation: string;
+    whyItMatters: string;
+    potentialImpact: string;
+    rootCauseHypothesis: string;
+    recommendedRemediation: string;
+    validationSteps: string[];
+    rollbackConsiderations: string;
+    executiveSummary: string;
+  };
+  evidenceSummary: {
+    evidenceAvailable: boolean;
+    count: number;
+    notes: string;
+  };
+  generatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Enterprise topology + discovery + impact + posture
+// ---------------------------------------------------------------------------
+
+export interface EnterpriseSite {
+  id: string;
+  label: string;
+  region: string;
+  timezone: string;
+  zones: string[];
+}
+
+export interface EnterpriseRegion {
+  code: string;
+  label: string;
+  flag: string;
+  sites: EnterpriseSite[];
+}
+
+export interface TierInfo {
+  id: NetworkTier;
+  label: string;
+  description: string;
+}
+
+export interface TopologyConnection {
+  id: string;
+  source: string;
+  destination: string;
+  protocol: string;
+  port: number;
+  networkZone: string;
+  tier: NetworkTier;
+  status: ConnectionStatus;
+  connectorStatus: ConnectorStatus;
+  purpose: string;
+}
+
+export interface EnterpriseTopology {
+  regions: EnterpriseRegion[];
+  tiers: TierInfo[];
+  connections: TopologyConnection[];
+  generatedAt: string;
+}
+
+export interface DiscoveryResult {
+  runId: string;
+  startedAt: string;
+  completedAt: string;
+  discovered: number;
+  updated: number;
+  unchanged: number;
+  assets: AssetRecord[];
+  notes: string[];
+}
+
+export interface ImpactNode {
+  id: string;
+  label: string;
+  kind: "asset" | "service" | "application" | "database" | "business" | "data";
+  detail?: string;
+  criticality?: AssetCriticality;
+  reachedFrom?: string;
+}
+
+export interface ImpactEdge {
+  from: string;
+  to: string;
+  relation: string;
+}
+
+export interface AssetImpactGraph {
+  rootAssetId: string;
+  rootLabel: string;
+  nodes: ImpactNode[];
+  edges: ImpactEdge[];
+  summary: string[];
+  generatedAt: string;
+}
+
+export interface AssetPostureSummary {
+  globalCompliance: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  remediationRate: number;
+  verificationRate: number;
+  byRegion: Array<{ region: string; label: string; score: number; assets: number }>;
+  byType: Array<{ type: AssetType; count: number; nonCompliant?: number }>;
+}
+
+// ---------------------------------------------------------------------------
+// Asset-aware compliance controls
+// ---------------------------------------------------------------------------
+
+export type AssetControlFramework = "ISO27001" | "NIST" | "CIS" | "PCI_DSS" | "OWASP" | "PROTOTYPE";
+
+export interface AssetComplianceControl {
+  id: string;
+  name: string;
+  description: string;
+  requirement: string;
+  frameworks: AssetControlFramework[];
+  severity: Severity;
+  appliesTo: AssetType[];
+  evidenceSource: string;
+  evalKind:
+    | "min_version"
+    | "enabled"
+    | "disabled"
+    | "exact"
+    | "port_exposed"
+    | "hash_match"
+    | "unexpired"
+    | "nonEmpty"
+    | "rule_scan"
+    | "range";
+  evalField: string;
+  expected?: unknown;
+  failureMessage: string;
+  remediation: string;
+  remediationActions: RemediationActionType[];
+}
+
+export interface AssetFrameworkCoverage {
+  framework: AssetControlFramework;
+  label: string;
+  totalControls: number;
+  passed: number;
+  failed: number;
+  score: number;
+  status: "COMPLIANT" | "PARTIAL" | "AT_RISK" | "NOT_ASSESSED";
+}
+
+export interface AssetControlCatalogue {
+  controls: AssetComplianceControl[];
+  frameworks: AssetFrameworkCoverage[];
+  disclaimer: string;
+  generatedAt: string;
 }

@@ -19,6 +19,7 @@
     "baseUrl": ".",
     "paths": {
       "@nexus/shared-types": ["../../packages/shared-types/src/index.ts"],
+      "@nexus/enterprise-catalog": ["../../packages/enterprise-catalog/src/index.ts"],
       "@/*": ["./src/*"]
     }
   },
