@@ -11,7 +11,7 @@ import type {
 import { applyRemediationAction, buildProposal, canTransition } from "@nexus/enterprise-catalog";
 import { ApiError } from "../reviewService";
 import { uniqueId } from "../../utils/helpers";
-import { findAssetFinding, scanAsset, type Instantiation, reevaluateControl } from "./assetService";
+import { findAssetFinding, scanAsset, applyFindingLifecycle, type Instantiation, reevaluateControl } from "./assetService";
 import type { ConnectorManager } from "./connectorManager";
 import { logEnterpriseEvent, simulatedDelay } from "./events";
 
@@ -50,6 +50,7 @@ export async function createRemediation(ctx: Instantiation, findingId: string, r
     createdAt: new Date().toISOString(),
   };
   await ctx.repo.saveRemediation(record);
+  await applyFindingLifecycle(ctx, asset.id, findingId, "REMEDIATION_PLANNED");
   await logEnterpriseEvent({
     eventType: "REMEDIATION_PLANNED",
     entityType: "remediation",
@@ -267,6 +268,7 @@ export async function executeRemediation(ctx: Instantiation, remId: string, acto
   rem.execution.completedAt = completedAt;
   rem.execution.logs = logs;
   rem.execution.message = `${rem.proposedAction.actionType}: ${applied.message}`;
+  await applyFindingLifecycle(ctx, rem.assetId, rem.findingId, "REMEDIATED");
 
   await saveAndLog(ctx, rem, {
     eventType: "REMEDIATION_EXECUTED",
@@ -334,6 +336,7 @@ export async function verifyRemediation(ctx: Instantiation, remId: string, actor
     rem.verification.after.compliance = `Control ${rem.controlId} re-evaluated PASS after remediation.`;
     rem.verification.evidenceAfterIds = evidenceAfter;
     rem.status = "VERIFIED";
+    await applyFindingLifecycle(ctx, rem.assetId, rem.findingId, "VERIFIED");
     return saveAndLog(ctx, rem, {
       eventType: "REMEDIATION_VERIFICATION_PASSED",
       entityType: "remediation",
@@ -355,6 +358,7 @@ export async function verifyRemediation(ctx: Instantiation, remId: string, actor
     : `Control ${rem.controlId} still reports ${afterFinding?.status ?? "FAIL"} after remediation.`;
   rem.verification.evidenceAfterIds = evidenceAfter;
   rem.status = "FAILED";
+  await applyFindingLifecycle(ctx, rem.assetId, rem.findingId, "OPEN");
   return saveAndLog(ctx, rem, {
     eventType: "REMEDIATION_VERIFICATION_FAILED",
     entityType: "remediation",
@@ -406,6 +410,7 @@ export async function rollbackRemediation(ctx: Instantiation, remId: string, act
     restoredState,
     at: new Date().toISOString(),
   };
+  await applyFindingLifecycle(ctx, rem.assetId, rem.findingId, "OPEN");
   return saveAndLog(ctx, rem, {
     eventType: "REMEDIATION_ROLLED_BACK",
     entityType: "remediation",

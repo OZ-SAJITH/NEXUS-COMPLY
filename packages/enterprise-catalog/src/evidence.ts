@@ -45,21 +45,21 @@ export interface NormalizedEvidenceInput {
   detail?: Record<string, unknown>;
 }
 
-/** Deterministic canonical evidence-type mapping for the 16 control catalogue. */
+/** Deterministic canonical evidence-type mapping for the 21-control catalogue. */
 export function evidenceTypeForControlId(controlId: string): EvidenceType {
   if (controlId.startsWith("TLS")) return "TLS";
-  if (controlId.startsWith("PKI")) return "CERTIFICATE";
-  if (controlId.startsWith("PROTO")) return "NETWORK";
+  if (controlId.startsWith("CERT")) return "CERTIFICATE";
+  if (controlId.startsWith("ACL")) return "ACL";
+  if (controlId.startsWith("NET")) return "NETWORK";
   if (controlId.startsWith("CRYPTO")) return "CRYPTOGRAPHY";
-  if (controlId.startsWith("DBENC")) return "CRYPTOGRAPHY";
+  if (controlId === "DB-001") return "CRYPTOGRAPHY";
   if (controlId.startsWith("DB")) return "NETWORK";
   if (controlId.startsWith("FW")) return "FIREWALL";
-  if (controlId.startsWith("AUTH")) return "AUTHENTICATION";
-  if (controlId.startsWith("INTEG") || controlId.startsWith("CHECKSUM")) return "INTEGRITY";
+  if (controlId.startsWith("AUTH") || controlId.startsWith("ACCESS")) return "AUTHENTICATION";
+  if (controlId.startsWith("INTEGRITY") || controlId.startsWith("CONFIG")) return "INTEGRITY";
   if (controlId.startsWith("XMLSIG")) return "API_RESPONSE";
   if (controlId.startsWith("API")) return "API_RESPONSE";
   if (controlId.startsWith("DATA")) return "CONFIGURATION";
-  if (controlId.startsWith("PRIV")) return "AUTHENTICATION";
   if (controlId.startsWith("OUTDATE")) return "PACKAGE_METADATA";
   if (controlId.startsWith("MQ")) return "CONFIGURATION";
   return "CONFIGURATION";
@@ -140,7 +140,7 @@ function advisoryRows(asset: AssetRecord, network: EvidenceNetworkMeta): Normali
     case "PROXY": {
       const anyRules = Number(s.firewallAnyRules ?? 0);
       rows.push({
-        controlId: "ACL-001",
+        controlId: "ACLOBS-001",
         evidenceType: "ACL",
         observedValue: anyRules > 0 ? `permit tcp any any eq 443 // ${anyRules} broad allow rules` : "deny ip any any (deny-by-default)",
         expectedValue: "deny-by-default; only least-privilege permits",
@@ -149,7 +149,7 @@ function advisoryRows(asset: AssetRecord, network: EvidenceNetworkMeta): Normali
         confidence: 0.98,
         rawReference: `${host}:acl/base-rule`,
         network: { ...base, destinationPort: 443 },
-        detail: { controlId: "ACL-001", anyRules, capability: "ACL" },
+        detail: { controlId: "ACLOBS-001", anyRules, capability: "ACL" },
       });
       rows.push({
         controlId: "NAT-001",
@@ -235,7 +235,7 @@ function advisoryRows(asset: AssetRecord, network: EvidenceNetworkMeta): Normali
       const days = Number(s.certDaysToExpiry ?? 0);
       const issuer = String(s.certIssuer ?? asset.vendor);
       rows.push({
-        controlId: "CERT-001",
+        controlId: "CERTOBS-001",
         evidenceType: "CERTIFICATE",
         observedValue: `subject=${asset.hostname} issuer=${issuer} key=${asset.technology === "TLS RSA 2048" ? "2048-bit RSA" : "ECDSA P-256"} sig=sha256WithRSAEncryption expires=${String(s.certExpiry ?? "unknown")} (${days}d)`,
         expectedValue: "issuer valid, key >= 2048-bit, expiry > 30 days",
@@ -243,7 +243,7 @@ function advisoryRows(asset: AssetRecord, network: EvidenceNetworkMeta): Normali
         source: "Certificate metadata (X.509) evidence",
         confidence: 0.99,
         rawReference: `${host}:x509/pem`,
-        detail: { controlId: "CERT-001", issuer, daysToExpiry: days, keySize: asset.technology.includes("2048") ? 2048 : 256, signatureAlgorithm: "sha256WithRSAEncryption", capability: "CERTIFICATES" },
+        detail: { controlId: "CERTOBS-001", issuer, daysToExpiry: days, keySize: asset.technology.includes("2048") ? 2048 : 256, signatureAlgorithm: "sha256WithRSAEncryption", capability: "CERTIFICATES" },
       });
       rows.push({
         controlId: "TLSCOMP-001",

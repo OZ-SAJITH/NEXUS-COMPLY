@@ -42,6 +42,8 @@ import type {
   EvidenceWithVerification,
   FindingAnalysis,
   RemediationRecord,
+  ComplianceSummary,
+  FindingLifecycleUpdate,
 } from "@nexus/shared-types";
 
 export interface EnterpriseTopology {
@@ -310,6 +312,9 @@ export const api = {
     testAssetConnector: (id: string) => request<ConnectorTestResult>(`/assets/${id}/connector/test`, { method: "POST", body: JSON.stringify({}) }),
     assetEvidenceDetail: (assetId: string, evidenceId: string) => request<EvidenceWithVerification>(`/assets/${assetId}/evidence/${evidenceId}`),
     topology: () => request<EnterpriseTopology>("/enterprise/topology"),
+    complianceSummary: () => request<ComplianceSummary>("/enterprise/compliance-summary"),
+    setFindingLifecycle: (assetId: string, findingId: string, body: FindingLifecycleUpdate) =>
+      request<AssetFinding>(`/assets/${assetId}/findings/${findingId}/lifecycle`, { method: "POST", body: JSON.stringify(body) }),
     connectors: () => request<ConnectorRecord[]>("/connectors"),
     connector: (id: string) => request<ConnectorRecord>(`/connectors/${id}`),
     connectorHealth: (id: string) => request<{ id: string; status: string; lastContactAt?: string; message?: string }>(`/connectors/${id}/health`),

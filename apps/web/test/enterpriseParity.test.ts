@@ -197,4 +197,31 @@ describe("demoApi dispatch — mirrors the enterprise REST surface", () => {
     expect(() => dispatchDemo("/api/assets/does-not-exist/findings")).toThrowError(/not found/i);
     expect(() => dispatchDemo("/api/evidence/nope")).toThrowError(/not found/i);
   });
+
+  it("PHASE 3 — serves the compliance summary with score, severities and lifecycle breakdown", () => {
+    const s = demo<{ score: number; passed: number; failed: number; warnings: number; na: number; bySeverity: Array<{ severity: string; count: number }>; lifecycleBreakdown: Array<{ lifecycle: string; count: number }> }>("/api/enterprise/compliance-summary");
+    expect(s.score).toBeGreaterThanOrEqual(0);
+    expect(s.passed + s.failed + s.warnings + s.na).toBe(s.total);
+    expect(Array.isArray(s.bySeverity)).toBe(true);
+    expect(Array.isArray(s.lifecycleBreakdown)).toBe(true);
+    expect(s.lifecycleBreakdown.some((l) => l.lifecycle === "OPEN")).toBe(true);
+  });
+
+  it("PHASE 3 — finding lifecycle transition persists via the REST surface", () => {
+    const findings = demo<Array<{ id: string }>>("/api/assets/" + hero + "/findings");
+    expect(findings.length).toBeGreaterThan(0);
+    const id = findings[0].id;
+    const acked = demo<{ id: string; lifecycle: string; lifecycleReason?: string }>("/api/assets/" + hero + "/findings/" + id + "/lifecycle", {
+      method: "POST",
+      body: JSON.stringify({ lifecycle: "ACKNOWLEDGED", reason: "accepted temporarily pending owner sign-off" }),
+    });
+    expect(acked.id).toBe(id);
+    expect(acked.lifecycle).toBe("ACKNOWLEDGED");
+
+    const reopened = demo<{ id: string; lifecycle: string }>("/api/assets/" + hero + "/findings/" + id + "/lifecycle", {
+      method: "POST",
+      body: JSON.stringify({ lifecycle: "OPEN" }),
+    });
+    expect(reopened.lifecycle).toBe("OPEN");
+  });
 });

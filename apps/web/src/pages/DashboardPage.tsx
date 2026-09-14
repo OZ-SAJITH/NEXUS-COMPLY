@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ShieldCheck, AlertOctagon, FileWarning, Boxes, RefreshCw, Download, Plus, ClipboardCheck, ScanSearch, Gauge as GaugeIcon, Globe2, GitPullRequest, LifeBuoy, Scale, Snowflake, Cable, Wrench } from "lucide-react";
-import type { AuditRecord, DashboardStats, GovernanceDashboardStats, GovernanceEvaluation, AssetRecord, ConnectorRecord, RemediationRecord } from "@nexus/shared-types";
+import type { AuditRecord, DashboardStats, GovernanceDashboardStats, GovernanceEvaluation, AssetRecord, ComplianceSummary, ConnectorRecord, RemediationRecord } from "@nexus/shared-types";
 import { api, describeApiError } from "../services/api";
 import { PageHeader } from "../components/PageHeader";
 import { MetricCard } from "../components/MetricCard";
@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [entAssets, setEntAssets] = useState<AssetRecord[]>([]);
   const [entConnectors, setEntConnectors] = useState<ConnectorRecord[]>([]);
   const [entRems, setEntRems] = useState<RemediationRecord[]>([]);
+  const [entSummary, setEntSummary] = useState<ComplianceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const navigate = useNavigate();
@@ -68,8 +69,9 @@ export default function DashboardPage() {
       api.enterprise.assets().catch(() => [] as AssetRecord[]),
       api.enterprise.connectors().catch(() => [] as ConnectorRecord[]),
       api.enterprise.remediations().catch(() => [] as RemediationRecord[]),
+      api.enterprise.complianceSummary().catch(() => null as ComplianceSummary | null),
     ])
-      .then(([d, a, g, ge, ea, ec, er]) => {
+      .then(([d, a, g, ge, ea, ec, er, es]) => {
         setStats(d);
         setAudits(a);
         setGov(g);
@@ -77,6 +79,7 @@ export default function DashboardPage() {
         setEntAssets(ea);
         setEntConnectors(ec);
         setEntRems(er);
+        setEntSummary(es);
       })
       .catch((e) => setError(e))
       .finally(() => setLoading(false));
@@ -357,6 +360,41 @@ export default function DashboardPage() {
                 link={{ to: "/app/enterprise/remediation", label: "Closed-loop pipeline" }}
               />
             </div>
+            {entSummary ? (
+              <div className="mt-3 rounded-xl border border-surface-700 bg-surface-800/30 p-4">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500">Evidence-driven score</div>
+                    <div className="text-2xl font-bold text-slate-100">{entSummary.score}%</div>
+                  </div>
+                  {[
+                    { label: "Passed", value: entSummary.passed, cls: "text-emerald-300" },
+                    { label: "Failed", value: entSummary.failed, cls: "text-red-300" },
+                    { label: "Warnings", value: entSummary.warnings, cls: "text-amber-300" },
+                    { label: "N/A", value: entSummary.na, cls: "text-slate-400" },
+                  ].map((d) => (
+                    <div key={d.label}>
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500">{d.label}</div>
+                      <div className={`text-xl font-semibold ${d.cls}`}>{d.value}</div>
+                    </div>
+                  ))}
+                  {entSummary.bySeverity.map((s) => (
+                    <div key={s.severity}>
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500">{s.severity}</div>
+                      <div className={`text-xl font-semibold ${SEV_TEXT[s.severity] ?? "text-slate-300"}`}>{s.count}</div>
+                    </div>
+                  ))}
+                  <div className="ml-auto max-w-[260px]">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">Finding lifecycle</div>
+                    <div className="flex flex-wrap gap-1">
+                      {entSummary.lifecycleBreakdown.map((l) => (
+                        <span key={l.lifecycle} className="px-1.5 py-0.5 rounded-md border border-surface-700 bg-surface-850 text-[10px] font-mono text-slate-300">{l.lifecycle} <span className="text-slate-500">× {l.count}</span></span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </Reveal>
       ) : null}

@@ -60,6 +60,13 @@ export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 
 export type FindingStatus = "PASS" | "FAIL" | "WARNING" | "NOT_APPLICABLE";
 
+/**
+ * Lifecycle of an evidence-sourced compliance finding. Every finding starts at
+ * OPEN; remediation orchestration advances it PLANNED → REMEDIATED → VERIFIED,
+ * while direct human action may ACKNOWLEDGE or EXCEPT it.
+ */
+export type FindingLifecycle = "OPEN" | "ACKNOWLEDGED" | "REMEDIATION_PLANNED" | "REMEDIATED" | "VERIFIED" | "EXCEPTED";
+
 export type ControlFramework = "CIS" | "NIST" | "STIG" | "PROTOTYPE";
 
 export interface ComplianceControl {
@@ -376,6 +383,7 @@ export type AuditEventType =
   | "REMEDIATION_VERIFICATION_PASSED"
   | "REMEDIATION_VERIFICATION_FAILED"
   | "REMEDIATION_ROLLED_BACK"
+  | "FINDING_LIFECYCLE_CHANGED"
   | "CONNECTOR_STATUS_CHANGED";
 
 export type AuditEventSource = "system" | "ai" | "human";
@@ -1448,6 +1456,14 @@ export interface AssetFinding extends Finding {
   assetType: AssetType;
   location?: AssetLocationRef;
   riskExplanation?: RiskExplanation;
+  /** Deterministic lifecycle state (evidence-driven, tracked across scans). */
+  lifecycle?: FindingLifecycle;
+  /** Observed value the rule evaluated (evidence-grounded). */
+  observedValue?: string;
+  /** Expected/baseline value the rule compared against. */
+  expectedValue?: string;
+  /** Structured remediation guidance emitted by the rule engine. */
+  remediationGuidance?: string;
 }
 
 export interface AssetScanRecord {
@@ -1729,7 +1745,11 @@ export interface AssetComplianceControl {
     | "unexpired"
     | "nonEmpty"
     | "rule_scan"
-    | "range";
+    | "range"
+    | "legacy_protocols"
+    | "cert_crypto"
+    | "mgmt_access"
+    | "acl";
   evalField: string;
   expected?: unknown;
   failureMessage: string;
@@ -1752,4 +1772,30 @@ export interface AssetControlCatalogue {
   frameworks: AssetFrameworkCoverage[];
   disclaimer: string;
   generatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Compliance summary (evidence-driven, deterministic)
+// ---------------------------------------------------------------------------
+
+export interface ComplianceSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  warnings: number;
+  na: number;
+  score: number;
+  byCategory: Array<{ category: string; passed: number; failed: number; warnings: number }>;
+  bySeverity: Array<{ severity: Severity; count: number }>;
+  lifecycleBreakdown: Array<{ lifecycle: FindingLifecycle; count: number }>;
+  generatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Finding lifecycle update input
+// ---------------------------------------------------------------------------
+
+export interface FindingLifecycleUpdate {
+  lifecycle: Extract<FindingLifecycle, "ACKNOWLEDGED" | "EXCEPTED" | "OPEN">;
+  reason?: string;
 }

@@ -9,10 +9,12 @@ import {
   assetFindings,
   assetImpact,
   assetScans,
+  complianceSummary,
   discoverAssets,
   ensureAssets,
   evidenceDetail,
   scanAsset,
+  setFindingLifecycle,
   testAssetConnector,
   ENTERPRISE_REGIONS,
   ENTERPRISE_TIERS,
@@ -116,6 +118,45 @@ enterpriseRouter.get("/assets/:id/impact", async (req, res) => {
   const repo = getRepository();
   const graph = await assetImpact({ repo, manager: new ConnectorManager(repo) }, req.params.id);
   res.json(graph);
+});
+
+const lifecycleSchema = z.object({
+  lifecycle: z.enum(["ACKNOWLEDGED", "EXCEPTED", "OPEN"]),
+  reason: z.string().trim().max(2000).optional(),
+});
+
+/**
+ * PHASE 3 finding lifecycle: human actor acknowledges / excepts / reopens a
+ * finding. Remediation orchestration advances PLANNED → REMEDIATED → VERIFIED
+ * through the remediation workflow.
+ */
+enterpriseRouter.post("/assets/:id/findings/:findingId/lifecycle", async (req, res, next) => {
+  const repo = getRepository();
+  const parsed = lifecycleSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid lifecycle update", issues: parsed.error.flatten().fieldErrors });
+    return;
+  }
+  try {
+    const finding = await setFindingLifecycle({ repo, manager: new ConnectorManager(repo) }, req.params.id, req.params.findingId, parsed.data);
+    res.json(finding);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PHASE 3 compliance summary — deterministic, evidence-grounded posture across
+ * the entire managed estate (rules re-run against persisted evidence).
+ */
+enterpriseRouter.get("/enterprise/compliance-summary", async (_req, res, next) => {
+  const repo = getRepository();
+  try {
+    const summary = await complianceSummary({ repo, manager: new ConnectorManager(repo) });
+    res.json(summary);
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ---------------------------------------------------------------------------

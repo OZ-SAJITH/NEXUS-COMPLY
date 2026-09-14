@@ -5,14 +5,15 @@ import type {
   FindingStatus,
   Severity,
 } from "@nexus/shared-types";
+import { ruleForControl, evaluateRule, type RuleEvaluation } from "./rules";
 
 // ---------------------------------------------------------------------------
 // Asset-aware compliance controls (deterministic).
 //
-// These are representative security-control definitions for a prototype. They
-// intentionally use generic security-control language rather than quoting
-// exact legal/regulatory text. Each control is evaluated against normalized
-// evidence (observedState) and is scoped by asset type (appliesTo).
+// PHASE 3 — Canonical 21-control catalog. Every control delegates its core
+// evaluation to the matching ComplianceRule in rules.ts; the legacy switch
+// below is retained only as a fallback path and for historical evalKind
+// metadata the catalogue may still reference.
 // ---------------------------------------------------------------------------
 
 export interface EvalOutcome {
@@ -37,7 +38,7 @@ function asNumber(v: unknown): number | null {
 
 function versionToRank(version: string): number {
   const parts = version.match(/(\d+)[^0-9]*(\d+)[^0-9]*(\d+)/);
-  if (parts) return Number(parts[1]) * 10000 + Number(parts[2] ?? 0) * 100 + Number(parts[3] ?? 0);
+  if (parts) return Number(parts[1]) * 10000 + Number(parts[2]) * 100 + Number(parts[3]);
   const simple = version.match(/^(\d+)/);
   return simple ? Number(simple[1]) * 10000 : 0;
 }
@@ -48,6 +49,10 @@ function tlsRank(version: string): number {
   return Number(m[1]) * 10 + Number(m[2]);
 }
 
+// ---------------------------------------------------------------------------
+// 21-control catalog
+// ---------------------------------------------------------------------------
+
 export const ASSET_CONTROLS: AssetComplianceControl[] = [
   {
     id: "TLS-001",
@@ -56,7 +61,7 @@ export const ASSET_CONTROLS: AssetComplianceControl[] = [
     requirement: "Minimum supported TLS version >= 1.2.",
     frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS", "OWASP", "PROTOTYPE"],
     severity: "CRITICAL",
-    appliesTo: ["API", "APPLICATION", "LOAD_BALANCER", "SERVER", "PROXY", "MESSAGE_QUEUE"],
+    appliesTo: ["API", "APPLICATION", "LOAD_BALANCER", "SERVER", "PROXY", "DATABASE", "MESSAGE_QUEUE"],
     evidenceSource: "TLS handshake / service configuration evidence",
     evalKind: "min_version",
     evalField: "tlsMinVersion",
@@ -66,7 +71,7 @@ export const ASSET_CONTROLS: AssetComplianceControl[] = [
     remediationActions: ["SET_TLS_MIN_VERSION"],
   },
   {
-    id: "PKI-002",
+    id: "CERT-001",
     name: "Certificate Validity",
     description: "Public/private certificates must be valid and non-expiring.",
     requirement: "Installed certificate is not expired and renews before the 30-day warning window.",
@@ -82,11 +87,11 @@ export const ASSET_CONTROLS: AssetComplianceControl[] = [
     remediationActions: ["REVOKE_AND_RENEW_CERTIFICATE"],
   },
   {
-    id: "PROTO-003",
+    id: "NET-001",
     name: "Insecure Protocol Disabled",
     description: "Insecure protocols (telnet, FTP, unencrypted HTTP) must be disabled.",
     requirement: "No insecure protocol is enabled on the service.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS", "OWASP", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST", "CIS", "OWASP"],
     severity: "HIGH",
     appliesTo: ["API", "APPLICATION", "LOAD_BALANCER", "SERVER", "NETWORK_DEVICE", "ROUTER", "SWITCH"],
     evidenceSource: "Service/configuration evidence",
@@ -98,99 +103,99 @@ export const ASSET_CONTROLS: AssetComplianceControl[] = [
     remediationActions: ["DISABLE_INSECURE_PROTOCOL"],
   },
   {
-    id: "CRYPTO-004",
-    name: "Strong Cryptographic Configuration",
+    id: "CRYPTO-001",
+    name: "Cryptographic Configuration",
     description: "Cryptographic configuration must not rely on weak ciphers.",
     requirement: "Cipher suite and key configuration are rated strong.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS", "OWASP", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS"],
     severity: "HIGH",
-    appliesTo: ["API", "APPLICATION", "LOAD_BALANCER", "SERVER", "PROXY", "MESSAGE_QUEUE"],
-    evidenceSource: "Cipher suite / cryptographic policy evidence",
+    appliesTo: ["API", "APPLICATION", "LOAD_BALANCER", "SERVER", "PROXY"],
+    evidenceSource: "TLS / crypto posture evidence",
     evalKind: "exact",
     evalField: "cipherStrength",
     expected: "strong",
     failureMessage: "Weak cipher configuration is in use.",
-    remediation: "Enforce strong cipher suites and disable legacy key exchange algorithms.",
+    remediation: "Enforce modern cipher suites and disable weak algorithms.",
     remediationActions: ["ENFORCE_STRONG_CIPHERS"],
   },
   {
-    id: "DBENC-005",
+    id: "DB-001",
     name: "Database Encryption at Rest",
     description: "Database storage must be encrypted at rest.",
     requirement: "Storage-level encryption is enabled.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS"],
     severity: "HIGH",
     appliesTo: ["DATABASE"],
-    evidenceSource: "Database security metadata evidence",
+    evidenceSource: "Database configuration evidence",
     evalKind: "enabled",
     evalField: "dbEncryption",
-    expected: "true",
+    expected: "enabled",
     failureMessage: "Database encryption at rest is disabled.",
-    remediation: "Enable transparent data encryption / storage encryption for the database.",
+    remediation: "Enable database encryption at rest.",
     remediationActions: ["ENABLE_DB_ENCRYPTION"],
   },
   {
-    id: "DBEX-006",
-    name: "Database Exposure",
+    id: "DB-002",
+    name: "Database Listener Exposure",
     description: "Databases must not be reachable from unrestricted networks.",
     requirement: "Database is bound to an internal address, not 0.0.0.0/internet.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS"],
     severity: "CRITICAL",
     appliesTo: ["DATABASE"],
-    evidenceSource: "Port-binding / connection metadata evidence",
+    evidenceSource: "Network binding evidence",
     evalKind: "port_exposed",
     evalField: "dbBindAddress",
     expected: "internal network address",
     failureMessage: "Database is bound to an unrestricted/exposed address.",
-    remediation: "Rebind the database listener to an internal address behind the DB firewall zone.",
+    remediation: "Restrict the database listener to an internal network address only.",
     remediationActions: ["RESTRICT_DB_BIND"],
   },
   {
-    id: "FW-007",
-    name: "Excessive Firewall Access",
+    id: "FW-001",
+    name: "Firewall Broad Allow Rules",
     description: "Firewall policy must not contain excessive ANY/ANY rules.",
-    requirement: "No broad allow rules (ANY→ANY); policy is deny-by-default.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PROTOTYPE"],
+    requirement: "No broad allow rules (ANY->ANY); policy is deny-by-default.",
+    frameworks: ["ISO27001", "NIST", "CIS"],
     severity: "HIGH",
-    appliesTo: ["FIREWALL", "NETWORK_DEVICE", "PROXY"],
-    evidenceSource: "Firewall policy/rule evidence",
+    appliesTo: ["FIREWALL", "NETWORK_DEVICE"],
+    evidenceSource: "Firewall rule evidence",
     evalKind: "rule_scan",
     evalField: "firewallAnyRules",
     expected: "0 broad allow rules",
     failureMessage: "Firewall policy contains excessive broad allow rules.",
-    remediation: "Consolidate and narrow overly-permissive firewall rules to least-privilege.",
+    remediation: "Audit and consolidate broad allow rules into scoped exceptions.",
     remediationActions: ["CONSOLIDATE_FIREWALL_RULE"],
   },
   {
-    id: "AUTH-008",
-    name: "Strong Authentication",
+    id: "AUTH-001",
+    name: "Authentication Strength",
     description: "Administrative/privileged access must use strong authentication (e.g. MFA).",
     requirement: "Authentication strength is rated strong/MFA for administrative access.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS", "OWASP", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS", "OWASP"],
     severity: "HIGH",
-    appliesTo: ["FIREWALL", "ROUTER", "SWITCH", "SERVER", "DATABASE", "API", "APPLICATION", "NETWORK_DEVICE", "PROXY", "MESSAGE_QUEUE"],
+    appliesTo: ["API", "APPLICATION", "LOAD_BALANCER", "SERVER", "DATABASE", "MESSAGE_QUEUE"],
     evidenceSource: "Authentication configuration evidence",
     evalKind: "exact",
     evalField: "authStrength",
     expected: "strong|mfa",
     failureMessage: "Weak or no multi-factor authentication is enforced.",
-    remediation: "Require strong (ideally MFA) authentication for all privileged access paths.",
+    remediation: "Enforce strong authentication or multi-factor authentication.",
     remediationActions: ["ENFORCE_STRONG_AUTH"],
   },
   {
-    id: "INTEG-009",
+    id: "INTEGRITY-001",
     name: "Integrity Validation",
     description: "Systems must validate the integrity of deployed artifacts.",
     requirement: "Integrity validation (signatures/checksums) is enabled for deployable artifacts.",
-    frameworks: ["ISO27001", "NIST", "CIS", "OWASP", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST"],
     severity: "MEDIUM",
-    appliesTo: ["APPLICATION", "API", "SERVER", "VIRTUAL_MACHINE", "MESSAGE_QUEUE"],
+    appliesTo: ["API", "APPLICATION", "SERVER"],
     evidenceSource: "Deployment/artifact metadata evidence",
     evalKind: "enabled",
     evalField: "integrityValidation",
-    expected: "true",
+    expected: "enabled",
     failureMessage: "Integrity validation is not enabled for deployed artifacts.",
-    remediation: "Enable signature/checksum validation in the deployment pipeline.",
+    remediation: "Enable integrity validation for deployed artifacts.",
     remediationActions: ["ENABLE_INTEGRITY_VALIDATION"],
   },
   {
@@ -198,114 +203,198 @@ export const ASSET_CONTROLS: AssetComplianceControl[] = [
     name: "XML Signature Validation",
     description: "Services consuming XML must validate XML signatures.",
     requirement: "XML signature validation enabled on XML-consuming endpoints.",
-    frameworks: ["OWASP", "PCI_DSS", "PROTOTYPE"],
+    frameworks: ["OWASP", "NIST"],
     severity: "HIGH",
-    appliesTo: ["API", "APPLICATION"],
-    evidenceSource: "API/XML processor configuration evidence",
+    appliesTo: ["API", "APPLICATION", "SERVER"],
+    evidenceSource: "XML processing evidence",
     evalKind: "enabled",
     evalField: "xmlSignatureValidation",
-    expected: "true",
+    expected: "enabled",
     failureMessage: "XML signatures are not validated on XML-consuming endpoints.",
-    remediation: "Enable XML signature validation and reject unsigned/unverified XML.",
+    remediation: "Enable XML signature validation on all XML-consuming endpoints.",
     remediationActions: ["ENABLE_XML_SIGNATURE_VALIDATION"],
   },
   {
-    id: "API-011",
-    name: "Secure API Configuration",
-    description: "APIs must enforce authentication and rate limiting.",
-    requirement: "API authentication and rate limiting are enforced.",
-    frameworks: ["OWASP", "CIS", "PCI_DSS", "PROTOTYPE"],
+    id: "API-001",
+    name: "API Authentication Enforcement",
+    description: "APIs must enforce authentication on all endpoints.",
+    requirement: "API authentication is enforced.",
+    frameworks: ["OWASP", "NIST", "PCI_DSS"],
     severity: "HIGH",
     appliesTo: ["API"],
-    evidenceSource: "API gateway configuration evidence",
+    evidenceSource: "API configuration evidence",
     evalKind: "enabled",
     evalField: "apiAuthEnabled",
-    expected: "true",
-    failureMessage: "API endpoints are exposed without authentication/rate limiting.",
-    remediation: "Enforce authentication and rate limiting on all API endpoints.",
+    expected: "enabled",
+    failureMessage: "API endpoints are exposed without authentication.",
+    remediation: "Enforce authentication on all API endpoints.",
+    remediationActions: ["SECURE_API_CONFIG"],
+  },
+  {
+    id: "API-002",
+    name: "API Rate Limiting",
+    description: "APIs must enforce rate limiting to protect against abuse.",
+    requirement: "API rate limiting is enforced.",
+    frameworks: ["OWASP"],
+    severity: "MEDIUM",
+    appliesTo: ["API"],
+    evidenceSource: "API configuration evidence",
+    evalKind: "enabled",
+    evalField: "apiRateLimit",
+    expected: "enabled",
+    failureMessage: "API rate limiting is not enforced.",
+    remediation: "Enable API rate limiting to protect against abuse and denial-of-service.",
     remediationActions: ["SECURE_API_CONFIG"],
   },
   {
     id: "DATA-012",
-    name: "Sensitive Data Exposure",
+    name: "Plaintext Secrets Detection",
     description: "Secrets and sensitive data must not be stored in plaintext.",
     requirement: "No plaintext secrets/tokens stored in configuration or storage.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS", "OWASP", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST", "CIS", "OWASP"],
     severity: "CRITICAL",
-    appliesTo: ["APPLICATION", "API", "SERVER", "DATABASE", "CLOUD_RESOURCE", "MESSAGE_QUEUE", "VIRTUAL_MACHINE"],
-    evidenceSource: "Secrets-analysis / data-classification evidence",
+    appliesTo: ["API", "APPLICATION", "SERVER"],
+    evidenceSource: "Configuration / secret scanning evidence",
     evalKind: "disabled",
     evalField: "plaintextSecrets",
     expected: "false",
     failureMessage: "Plaintext secrets or sensitive data were detected.",
-    remediation: "Rotate detected secrets and migrate to a managed vault.",
+    remediation: "Rotate and screen exposed secrets; move all secrets to a vault.",
     remediationActions: ["ROTATE_AND_SCREEN_SECRETS"],
   },
   {
-    id: "PRIV-013",
-    name: "Privileged Access Restriction",
+    id: "ACCESS-001",
+    name: "Privileged Access Scope",
     description: "Privileged access must be scoped and least-privileged.",
     requirement: "No broad/any-source privileged access is configured.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST", "CIS"],
     severity: "HIGH",
-    appliesTo: ["FIREWALL", "ROUTER", "SWITCH", "SERVER", "DATABASE", "NETWORK_DEVICE", "PROXY", "APPLICATION"],
-    evidenceSource: "Access-control configuration evidence",
+    appliesTo: ["API", "APPLICATION", "SERVER", "DATABASE"],
+    evidenceSource: "Access control evidence",
     evalKind: "disabled",
     evalField: "privilegedBroadAccess",
     expected: "false",
     failureMessage: "Privileged access is granted too broadly.",
-    remediation: "Restrict privileged access to named/least-privilege roles.",
+    remediation: "Restrict privileged access to least-privilege roles only.",
     remediationActions: ["RESTRICT_PRIVILEGED_ACCESS"],
   },
   {
     id: "OUTDATE-014",
-    name: "Outdated Service / Configuration",
+    name: "Software Currency",
     description: "Deployed services must not fall dangerously behind supported versions.",
     requirement: "Service version is supported and within the maintenance window.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PROTOTYPE"],
+    frameworks: ["NIST", "CIS"],
     severity: "MEDIUM",
-    appliesTo: ["SERVER", "VIRTUAL_MACHINE", "APPLICATION", "API", "ROUTER", "SWITCH", "LOAD_BALANCER", "PROXY"],
-    evidenceSource: "Package/version metadata evidence",
+    appliesTo: ["API", "APPLICATION", "SERVER", "LOAD_BALANCER", "ROUTER", "SWITCH", "NETWORK_DEVICE", "MESSAGE_QUEUE"],
+    evidenceSource: "Service version evidence",
     evalKind: "range",
     evalField: "serviceVersion",
     expected: "supported version",
     failureMessage: "A deployed service is running an outdated/unsupported version.",
-    remediation: "Upgrade the service to a current supported version.",
+    remediation: "Upgrade the service to the current stable version.",
     remediationActions: ["UPGRADE_SERVICE_VERSION"],
   },
   {
-    id: "CHECKSUM-015",
-    name: "Checksum / Integrity Mismatch",
+    id: "CONFIG-001",
+    name: "Configuration Integrity Check",
     description: "Configuration baselines must match the approved checksum.",
     requirement: "Observed configuration checksum matches the approved baseline.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST", "CIS"],
     severity: "HIGH",
-    appliesTo: ["SERVER", "VIRTUAL_MACHINE", "APPLICATION", "API", "CLOUD_RESOURCE", "NETWORK_DEVICE"],
-    evidenceSource: "Baseline/checksum comparison evidence",
+    appliesTo: ["API", "APPLICATION", "SERVER", "LOAD_BALANCER"],
+    evidenceSource: "Baseline checksum evidence",
     evalKind: "hash_match",
     evalField: "configChecksum",
     expected: "matches baseline",
     failureMessage: "Configuration differs from the approved baseline (checksum mismatch).",
-    remediation: "Restore the approved baseline configuration and verify the checksum.",
+    remediation: "Restore the approved configuration baseline.",
     remediationActions: ["RESTORE_BASELINE_HASH"],
   },
   {
     id: "MQ-016",
-    name: "Message Queue Authentication",
+    name: "Message Queue Broker Authentication",
     description: "Message queues must require authentication.",
     requirement: "Authentication is enforced on the message broker.",
-    frameworks: ["ISO27001", "NIST", "CIS", "PROTOTYPE"],
+    frameworks: ["ISO27001", "NIST", "CIS"],
     severity: "CRITICAL",
     appliesTo: ["MESSAGE_QUEUE"],
-    evidenceSource: "Broker security metadata evidence",
+    evidenceSource: "Broker configuration evidence",
     evalKind: "enabled",
     evalField: "mqAuthRequired",
-    expected: "true",
+    expected: "enabled",
     failureMessage: "Message queue accepts unauthenticated connections.",
-    remediation: "Enable broker authentication and revoke anonymous access.",
+    remediation: "Enforce broker authentication and block unauthenticated connections.",
     remediationActions: ["SECURE_MESSAGE_QUEUE"],
   },
+  {
+    id: "TLS-002",
+    name: "Legacy Protocol Usage",
+    description: "Legacy TLS/SSL protocols (SSLv3, TLS 1.0, TLS 1.1) must be disabled.",
+    requirement: "No TLS 1.0/1.1/SSLv3 legacy protocol is enabled.",
+    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS"],
+    severity: "MEDIUM",
+    appliesTo: ["API", "APPLICATION", "LOAD_BALANCER", "SERVER", "PROXY"],
+    evidenceSource: "Protocol enumeration evidence",
+    evalKind: "legacy_protocols",
+    evalField: "legacyProtocols",
+    expected: "none",
+    failureMessage: "Legacy TLS/SSL protocols are still enabled.",
+    remediation: "Remove legacy TLS/SSL protocol support (SSLv3, TLS 1.0, TLS 1.1).",
+    remediationActions: ["DISABLE_INSECURE_PROTOCOL"],
+  },
+  {
+    id: "CERT-002",
+    name: "Certificate Key Strength",
+    description: "Certificate keys must meet minimum strength requirements.",
+    requirement: ">= 2048-bit RSA / P-256 ECDSA key strength.",
+    frameworks: ["ISO27001", "NIST", "CIS", "PCI_DSS"],
+    severity: "MEDIUM",
+    appliesTo: ["CERTIFICATE"],
+    evidenceSource: "Certificate metadata evidence",
+    evalKind: "cert_crypto",
+    evalField: "certKeySize",
+    expected: ">= 2048-bit RSA / P-256 ECDSA",
+    failureMessage: "Certificate key strength is below the required minimum.",
+    remediation: "Replace the certificate with a key of >= 2048-bit RSA or P-256 ECDSA strength.",
+    remediationActions: ["REVOKE_AND_RENEW_CERTIFICATE"],
+  },
+  {
+    id: "FW-002",
+    name: "Management Interface Exposure",
+    description: "Management interfaces must be restricted to the management zone.",
+    requirement: "Management interface is accessible only from the management zone.",
+    frameworks: ["ISO27001", "NIST", "CIS"],
+    severity: "HIGH",
+    appliesTo: ["FIREWALL", "NETWORK_DEVICE", "ROUTER", "SWITCH"],
+    evidenceSource: "Management access evidence",
+    evalKind: "mgmt_access",
+    evalField: "mgmtAccessibleFrom",
+    expected: "management zone only",
+    failureMessage: "Management interface is reachable from outside the management zone.",
+    remediation: "Restrict the management interface to the dedicated management zone.",
+    remediationActions: ["CONSOLIDATE_FIREWALL_RULE"],
+  },
+  {
+    id: "ACL-001",
+    name: "Network ACL Default Policy",
+    description: "Network ACLs must use a deny-by-default policy.",
+    requirement: "Default ACL policy is deny-by-default.",
+    frameworks: ["ISO27001", "NIST", "CIS"],
+    severity: "HIGH",
+    appliesTo: ["FIREWALL", "NETWORK_DEVICE", "PROXY"],
+    evidenceSource: "ACL policy evidence",
+    evalKind: "acl",
+    evalField: "aclDefaultPolicy",
+    expected: "deny-by-default",
+    failureMessage: "Network ACL default policy is permissive (not deny-by-default).",
+    remediation: "Set the default ACL policy to deny-by-default and explicitly permit required traffic.",
+    remediationActions: ["CONSOLIDATE_FIREWALL_RULE"],
+  },
 ];
+
+// ---------------------------------------------------------------------------
+// Public helpers
+// ---------------------------------------------------------------------------
 
 export function getAssetControls(): AssetComplianceControl[] {
   return ASSET_CONTROLS;
@@ -317,13 +406,34 @@ export function getAssetControlById(id: string): AssetComplianceControl | undefi
 
 /**
  * Deterministic evaluation of a control against a simulated asset state.
- * Returns PASS / FAIL / WARNING / NOT_APPLICABLE plus observed+expected values.
+ * PHASE 3: Delegates to the rule engine first; falls back to the legacy
+ * switch for any control not yet migrated.
  */
 export function evaluateAssetControl(control: AssetComplianceControl, asset: AssetRecord): EvalOutcome {
   if (!control.appliesTo.includes(asset.assetType)) {
-    return { status: "NOT_APPLICABLE", observedValue: "asset type not in scope", expectedValue: control.requirement, reason: `Control ${control.id} does not apply to asset type ${asset.assetType}.` };
+    return {
+      status: "NOT_APPLICABLE",
+      observedValue: "asset type not in scope",
+      expectedValue: control.requirement,
+      reason: `Control ${control.id} does not apply to asset type ${asset.assetType}.`,
+    };
   }
 
+  // --- Rule engine path (deterministic, evidence-grounded) ---
+  const rule = ruleForControl(control.id);
+  if (rule) {
+    const evaluation: RuleEvaluation | undefined = evaluateRule(rule, asset);
+    if (evaluation) {
+      return {
+        status: evaluation.status,
+        observedValue: evaluation.observedValue,
+        expectedValue: evaluation.expectedValue,
+        reason: evaluation.reason,
+      };
+    }
+  }
+
+  // --- Legacy fallback (should be unreachable for the 21-rule catalog) ---
   const field = control.evalField;
   const raw = stateValue(asset, field);
 
@@ -332,11 +442,8 @@ export function evaluateAssetControl(control: AssetComplianceControl, asset: Ass
       const obs = String(raw ?? "unknown");
       const obsRank = tlsRank(obs);
       const expRank = tlsRank("1.2");
-      if (obsRank < expRank) {
-        return { status: "FAIL", observedValue: `TLS ${obs}`, expectedValue: "TLS 1.2 or higher", reason: `Observed minimum TLS ${obs} is lower than the required TLS 1.2.` };
-      }
-      if (obsRank === expRank) return { status: "PASS", observedValue: `TLS ${obs}`, expectedValue: "TLS 1.2 or higher", reason: `Observed minimum TLS ${obs} meets the requirement.` };
-      return { status: "PASS", observedValue: `TLS ${obs}`, expectedValue: "TLS 1.2 or higher", reason: `Observed minimum TLS ${obs} exceeds the requirement.` };
+      if (obsRank < expRank) return { status: "FAIL", observedValue: `TLS ${obs}`, expectedValue: "TLS 1.2 or higher", reason: `Observed minimum TLS ${obs} is lower than the required TLS 1.2.` };
+      return { status: "PASS", observedValue: `TLS ${obs}`, expectedValue: "TLS 1.2 or higher", reason: `Observed minimum TLS ${obs} meets the requirement.` };
     }
     case "unexpired": {
       const days = asNumber(raw);
@@ -430,5 +537,4 @@ export function assetControlPriority(status: FindingStatus): string {
   }
 }
 
-// Re-exported for consumers that want the outcome type under a friendlier name.
 export type Vulnerability = EvalOutcome;

@@ -2,6 +2,7 @@ export * from "./enterprise";
 export * from "./catalog";
 export * from "./connectors";
 export * from "./controls";
+export * from "./rules";
 export * from "./risk";
 export * from "./remediation";
 export * from "./discovery";

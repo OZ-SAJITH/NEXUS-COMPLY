@@ -11,9 +11,13 @@ import {
   assetConnectorProfile,
   testAssetConnector,
   evidenceDetail,
+  setFindingLifecycle,
+  applyFindingLifecycle,
+  complianceSummary,
 } from "../src/services/enterprise/assetService";
 import { analyzeFinding } from "../src/services/enterprise/aiAnalysisService";
 import { verifyEvidenceRecord, seededConnectors, upgradeStoredEvidenceIntegrity } from "@nexus/enterprise-catalog";
+import { evaluateEvidenceForAsset, findingsFromResults, ruleForControl, getAssetControls, INVENTORY, toAssetRecord, assetRelationships } from "@nexus/enterprise-catalog";
 
 async function ctx() {
   const repo = getRepository();
@@ -113,14 +117,139 @@ describe("AI analysis grounded in evidence", () => {
 });
 
 describe("Asset control catalogue & frameworks", () => {
-  it("returns controls and framework coverage", async () => {
+  it("returns the full 21-control catalogue with framework coverage", async () => {
     const c = await ctx();
     const catalogue = await assetControlCatalogue(c);
-    expect(catalogue.controls.length).toBe(16);
+    expect(catalogue.controls.length).toBe(21);
     expect(catalogue.frameworks.length).toBe(6);
     const nist = catalogue.frameworks.find((f) => f.framework === "NIST");
     expect(nist).toBeDefined();
     expect(nist!.status).toMatch(/COMPLIANT|PARTIAL|AT_RISK|NOT_ASSESSED/);
+    const ids = catalogue.controls.map((x) => x.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(["TLS-002", "CERT-002", "FW-002", "ACL-001", "API-002"]),
+    );
+    expect(new Set(ids).size).toBe(21);
+  });
+});
+
+describe("PHASE 3 — deterministic evidence-driven rule engine", () => {
+  beforeAll(async () => {
+    await getRepository().reset();
+  });
+
+  function clone(assetId: string, observedState: Record<string, unknown>) {
+    const seed = INVENTORY.find((a) => a.id === assetId)!;
+    const record = toAssetRecord(seed, assetRelationships());
+    return { ...record, id: `${seed.id}-case`, observedState: { ...record.observedState, ...observedState } };
+  }
+
+  it("catalogue exposes 21 rules via the registry", () => {
+    const controls = getAssetControls();
+    expect(controls.length).toBe(21);
+    const rules = ["TLS-001", "TLS-002", "CERT-001", "CERT-002", "NET-001", "CRYPTO-001", "DB-001", "DB-002", "FW-001", "FW-002", "ACL-001", "AUTH-001", "INTEGRITY-001", "XMLSIG-010", "API-001", "API-002", "DATA-012", "ACCESS-001", "OUTDATE-014", "CONFIG-001", "MQ-016"];
+    for (const id of rules) expect(ruleForControl(id)).toBeDefined();
+  });
+
+  it("resolves the TLS-001 matrix deterministically (1.2→PASS, 1.1→FAIL, 1.0→FAIL)", () => {
+    expect(evaluateEvidenceForAsset(clone("ast-api-gateway-01", { tlsMinVersion: "1.2" })).find((r) => r.ruleId === "TLS-001")!.evaluation.status).toBe("PASS");
+    expect(evaluateEvidenceForAsset(clone("ast-api-gateway-01", { tlsMinVersion: "1.1" })).find((r) => r.ruleId === "TLS-001")!.evaluation.status).toBe("FAIL");
+    expect(evaluateEvidenceForAsset(clone("ast-api-gateway-01", { tlsMinVersion: "1.0" })).find((r) => r.ruleId === "TLS-001")!.evaluation.status).toBe("FAIL");
+    expect(evaluateEvidenceForAsset(clone("ast-api-gateway-01", { tlsMinVersion: "1.2" })).find((r) => r.ruleId === "TLS-001")!.evaluation.observedValue).toBe("TLS 1.2");
+  });
+
+  it("flags legacy protocols via TLS-002 but ignores non-TLS insecure protocols", () => {
+    const explicit = evaluateEvidenceForAsset(clone("ast-api-gateway-01", { legacyProtocols: ["SSLv3", "TLSv1.0"] }));
+    expect(explicit.find((r) => r.ruleId === "TLS-002")!.evaluation.status).toBe("FAIL");
+    const hero = evaluateEvidenceForAsset(clone("ast-api-gateway-01", {}));
+    expect(ruleForControl("TLS-002")!.evaluate(clone("ast-api-gateway-01", { insecureProtocols: ["http"] }), { observedState: { insecureProtocols: ["http"] }, detail: {}, hasEvidence: false }).status).toBe("PASS");
+    expect(hero.find((r) => r.ruleId === "TLS-002")).toBeDefined();
+  });
+
+  it("CERT-002 derives key strength from certKeySize and technology strings", () => {
+    const weak = evaluateEvidenceForAsset(clone("ast-cert-sg-01", { certKeySize: 1024 }));
+    expect(weak.find((r) => r.ruleId === "CERT-002")!.evaluation.status).toBe("FAIL");
+    const strong = evaluateEvidenceForAsset(clone("ast-cert-sg-01", { certKeySize: 2048 }));
+    expect(strong.find((r) => r.ruleId === "CERT-002")!.evaluation.status).toBe("PASS");
+    const parsed = evaluateEvidenceForAsset(clone("ast-cert-sg-01", { certKeyAlgorithm: "RSA 1024" }));
+    expect(parsed.find((r) => r.ruleId === "CERT-002")!.evaluation.status).toBe("FAIL");
+    const ecdsa = evaluateEvidenceForAsset(clone("ast-cert-sg-01", { certKeyAlgorithm: "ECDSA P-256" }));
+    expect(ecdsa.find((r) => r.ruleId === "CERT-002")!.evaluation.status).toBe("PASS");
+  });
+
+  it("FW-002 fails on internet-exposed management and passes on internal mgmt", () => {
+    const exposed = evaluateEvidenceForAsset(clone("ast-fw-dmz-01", { mgmtAccessibleFrom: "0.0.0.0" }));
+    expect(exposed.find((r) => r.ruleId === "FW-002")!.evaluation.status).toBe("FAIL");
+    const internal = evaluateEvidenceForAsset(clone("ast-fw-dmz-01", { mgmtAccessibleFrom: "internal" }));
+    expect(internal.find((r) => r.ruleId === "FW-002")!.evaluation.status).toBe("PASS");
+  });
+
+  it("ACL-001 warns when indeterminant, fails permissive policies, passes deny-by-default", () => {
+    expect(evaluateEvidenceForAsset(clone("ast-fw-dmz-01", { aclDefaultPolicy: undefined, networkAclMode: undefined })).find((r) => r.ruleId === "ACL-001")!.evaluation.status).toBe("WARNING");
+    expect(evaluateEvidenceForAsset(clone("ast-fw-dmz-01", { aclDefaultPolicy: "allow-by-default" })).find((r) => r.ruleId === "ACL-001")!.evaluation.status).toBe("FAIL");
+    expect(evaluateEvidenceForAsset(clone("ast-fw-dmz-01", { aclDefaultPolicy: "deny-by-default" })).find((r) => r.ruleId === "ACL-001")!.evaluation.status).toBe("PASS");
+  });
+
+  it("CONFIG-001 fails on baseline drift and warns when unreported", () => {
+    const drift = evaluateEvidenceForAsset(clone("ast-app-chn-01", { configChecksum: "deadbeef", expectedChecksum: "f3a9c11d" }));
+    expect(drift.find((r) => r.ruleId === "CONFIG-001")!.evaluation.status).toBe("FAIL");
+    const unreported = evaluateEvidenceForAsset(clone("ast-app-chn-01", { configChecksum: "f3a9c11d", expectedChecksum: undefined }));
+    expect(unreported.find((r) => r.ruleId === "CONFIG-001")!.evaluation.status).toBe("WARNING");
+  });
+
+  it("is fully deterministic — identical inputs produce byte-identical findings", () => {
+    const a = clone("ast-fw-dmz-01", {});
+    const first = JSON.stringify(findingsFromResults(a, evaluateEvidenceForAsset(a)));
+    const again = JSON.stringify(findingsFromResults(a, evaluateEvidenceForAsset(a)));
+    expect(again).toBe(first);
+  });
+});
+
+describe("PHASE 3 — finding lifecycle + compliance summary", () => {
+  beforeAll(async () => {
+    await getRepository().reset();
+  });
+
+  it("human lifecycle transitions persist and re-open a finding", async () => {
+    const c = await ctx();
+    await discoverAssets(c);
+    const scan = await scanAsset(c, "ast-api-gateway-01", { trigger: "manual" });
+    const finding = scan.findings.find((f) => f.controlId === "TLS-001")!;
+    expect(finding.lifecycle).toBe("OPEN");
+
+    const ack = await setFindingLifecycle(c, "ast-api-gateway-01", finding.id, { lifecycle: "ACKNOWLEDGED", reason: "Triage complete" });
+    expect(ack.lifecycle).toBe("ACKNOWLEDGED");
+
+    const excepted = await setFindingLifecycle(c, "ast-api-gateway-01", finding.id, { lifecycle: "EXCEPTED", reason: "Business exception" });
+    expect(excepted.lifecycle).toBe("EXCEPTED");
+
+    const reopened = await setFindingLifecycle(c, "ast-api-gateway-01", finding.id, { lifecycle: "OPEN" });
+    expect(reopened.lifecycle).toBe("OPEN");
+
+    const scanReload = (await c.repo.scansForAsset("ast-api-gateway-01"))[0];
+    const persistedFinding = scanReload.findings.find((f) => f.id === finding.id)!;
+    expect(persistedFinding.lifecycle).toBe("OPEN");
+  });
+
+  it("rejects lifecycle updates for unknown findings", async () => {
+    const c = await ctx();
+    await expect(applyFindingLifecycle(c, "ast-api-gateway-01", "finding-does-not-exist", "ACKNOWLEDGED")).rejects.toBeDefined();
+  });
+
+  it("computes an evidence-driven portfolio compliance summary", async () => {
+    const c = await ctx();
+    await discoverAssets(c);
+    await scanAsset(c, "ast-api-gateway-01", { trigger: "manual" });
+    const summary = await complianceSummary(c);
+    expect(summary.total).toBeGreaterThan(0);
+    expect(summary.failed).toBeGreaterThan(0);
+    expect(summary.passed).toBeGreaterThan(0);
+    expect(summary.score).toBeGreaterThan(0);
+    expect(summary.score).toBeLessThanOrEqual(100);
+    expect(summary.byCategory.length).toBeGreaterThan(0);
+    expect(summary.bySeverity.some((s) => s.severity === "CRITICAL" && s.count > 0)).toBe(true);
+    expect(summary.lifecycleBreakdown.some((l) => l.lifecycle === "OPEN" && l.count > 0)).toBe(true);
+    expect(summary.na).toBeGreaterThan(0);
   });
 });
 

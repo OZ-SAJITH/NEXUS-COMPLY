@@ -42,7 +42,7 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     environment: "PROD_SIM", region: "IND", site: "site-chennai", networkZone: "APP", tier: "TIER_2",
     hostname: "api-gw-01.chennai.nexuscorp.in", ipAddress: "10.20.10.5", criticality: "CRITICAL",
     observedState: {
-      tlsMinVersion: "1.0", cipherStrength: "weak", insecureProtocols: ["http"], certDaysToExpiry: -9, certExpiry: "2026-09-03T00:00:00.000Z",
+      tlsMinVersion: "1.0", cipherStrength: "weak", insecureProtocols: ["http"], legacyProtocols: ["SSLv3", "TLSv1.0"], certDaysToExpiry: -9, certExpiry: "2026-09-03T00:00:00.000Z",
       apiAuthEnabled: true, apiRateLimit: true, xmlSignatureValidation: false, integrityValidation: true, plaintextSecrets: false, configChecksum: "f3a9c11d", serviceVersion: "3.4.0-ee",
     },
     tags: ["internet-facing", "payment-border"],
@@ -111,13 +111,13 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     id: "ast-fw-dmz-01", name: "FW-DMZ-01", assetType: "FIREWALL", vendor: "Palo Alto", technology: "PAN-OS 11.1",
     environment: "PROD_SIM", region: "IND", site: "site-chennai", networkZone: "DMZ", tier: "TIER_1",
     hostname: "fw-dmz-01.chennai.nexuscorp.in", ipAddress: "10.10.1.2", criticality: "CRITICAL",
-    observedState: { firewallAnyRules: 12, privilegedBroadAccess: true, authStrength: "weak", serviceVersion: "11.1.0", latestStableVersion: "11.1.3" },
+    observedState: { firewallAnyRules: 12, privilegedBroadAccess: true, authStrength: "weak", mgmtAccessibleFrom: "0.0.0.0", aclDefaultPolicy: "allow-by-default", serviceVersion: "11.1.0", latestStableVersion: "11.1.3" },
   },
   {
     id: "ast-fw-core-01", name: "FW-CORE-01", assetType: "FIREWALL", vendor: "Fortinet", technology: "FortiGate 7.4",
     environment: "PROD_SIM", region: "USA", site: "site-virginia", networkZone: "CORE", tier: "TIER_1",
     hostname: "fw-core-01.virginia.nexuscorp.net", ipAddress: "10.30.1.2", criticality: "CRITICAL",
-    observedState: { firewallAnyRules: 3, privilegedBroadAccess: false, authStrength: "strong", serviceVersion: "7.4.1" },
+    observedState: { firewallAnyRules: 3, privilegedBroadAccess: false, authStrength: "strong", mgmtAccessibleFrom: "internal", aclDefaultPolicy: "deny-by-default", serviceVersion: "7.4.1" },
   },
   {
     id: "ast-rtr-edge-01", name: "RTR-EDGE-01", assetType: "ROUTER", vendor: "Cisco", technology: "Cisco ISR 4451",
@@ -135,7 +135,7 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     id: "ast-lb-api-01", name: "LB-API-01", assetType: "LOAD_BALANCER", vendor: "F5", technology: "F5 BIG-IP 16.1",
     environment: "PROD_SIM", region: "USA", site: "site-oregon", networkZone: "APP", tier: "TIER_2",
     hostname: "lb-api-01.oregon.nexuscorp.net", ipAddress: "10.31.12.3", criticality: "HIGH",
-    observedState: { tlsMinVersion: "1.2", cipherStrength: "weak", certDaysToExpiry: 290, serviceVersion: "16.1.0", latestStableVersion: "17.1.2" },
+    observedState: { tlsMinVersion: "1.2", cipherStrength: "weak", insecureProtocols: [], legacyProtocols: ["TLSv1.1"], certDaysToExpiry: 290, serviceVersion: "16.1.0", latestStableVersion: "17.1.2" },
   },
   {
     id: "ast-cert-api-gateway", name: "CERT-API-GATEWAY", assetType: "CERTIFICATE", vendor: "DigiCert", technology: "TLS RSA 2048",
@@ -172,7 +172,7 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     id: "ast-proxy-egress-01", name: "PROXY-EGRESS-01", assetType: "PROXY", vendor: "Squid", technology: "Squid 5.7",
     environment: "PROD_SIM", region: "IND", site: "site-mumbai", networkZone: "DMZ", tier: "TIER_1",
     hostname: "proxy-eg-01.mumbai.nexuscorp.in", ipAddress: "10.21.1.4", criticality: "MEDIUM",
-    observedState: { privilegedBroadAccess: true, authStrength: "weak", serviceVersion: "5.7", latestStableVersion: "6.12" },
+    observedState: { privilegedBroadAccess: true, authStrength: "weak", mgmtAccessibleFrom: "0.0.0.0", aclDefaultPolicy: "allow-by-default", serviceVersion: "5.7", latestStableVersion: "6.12" },
   },
   {
     id: "ast-api-partner", name: "API-PARTNER", assetType: "API", vendor: "Kong", technology: "Kong Gateway 3.5",
@@ -191,7 +191,7 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     id: "ast-fw-chn-01", name: "FW-CHN-01", assetType: "FIREWALL", vendor: "Cisco", technology: "Cisco ASA 9.16",
     environment: "PROD_SIM", region: "IND", site: "site-chennai", networkZone: "DMZ", tier: "TIER_1",
     hostname: "fw-chn-01.chennai.nexuscorp.in", ipAddress: "10.10.1.10", criticality: "CRITICAL",
-    observedState: { firewallAnyRules: 9, privilegedBroadAccess: true, authStrength: "weak", serviceVersion: "9.16", latestStableVersion: "9.20" },
+    observedState: { firewallAnyRules: 9, privilegedBroadAccess: true, authStrength: "weak", mgmtAccessibleFrom: "0.0.0.0", aclDefaultPolicy: "allow-by-default", serviceVersion: "9.16", latestStableVersion: "9.20" },
     tags: ["perimeter", "internet-facing"],
   },
   {
@@ -211,7 +211,7 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     id: "ast-app-chn-01", name: "APP-CHN-01", assetType: "APPLICATION", vendor: "Nginx", technology: "Nginx 1.22 / Ubuntu 20.04",
     environment: "PROD_SIM", region: "IND", site: "site-chennai", networkZone: "APP", tier: "TIER_2",
     hostname: "app-chn-01.chennai.nexuscorp.in", ipAddress: "10.20.10.20", criticality: "HIGH",
-    observedState: { tlsMinVersion: "1.0", insecureProtocols: ["http"], cipherStrength: "weak", certDaysToExpiry: 18, serviceVersion: "1.22.1", latestStableVersion: "1.27.4" },
+    observedState: { tlsMinVersion: "1.0", insecureProtocols: ["http"], legacyProtocols: ["TLSv1.0"], cipherStrength: "weak", certDaysToExpiry: 18, serviceVersion: "1.22.1", latestStableVersion: "1.27.4" },
     tags: ["pii", "web"],
   },
   {
@@ -239,7 +239,7 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     id: "ast-fw-ny-01", name: "FW-NY-01", assetType: "FIREWALL", vendor: "Fortinet", technology: "FortiGate 7.2",
     environment: "PROD_SIM", region: "USA", site: "site-newyork", networkZone: "DMZ", tier: "TIER_1",
     hostname: "fw-ny-01.newyork.nexuscorp.net", ipAddress: "10.32.1.10", criticality: "CRITICAL",
-    observedState: { firewallAnyRules: 4, privilegedBroadAccess: false, authStrength: "strong", serviceVersion: "7.2.7", latestStableVersion: "7.2.9" },
+    observedState: { firewallAnyRules: 4, privilegedBroadAccess: false, authStrength: "strong", mgmtAccessibleFrom: "internal", aclDefaultPolicy: "deny-by-default", serviceVersion: "7.2.7", latestStableVersion: "7.2.9" },
     tags: ["perimeter", "internet-facing"],
   },
   {
@@ -260,14 +260,14 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     id: "ast-api-sg-01", name: "API-SG-01", assetType: "API", vendor: "Kong", technology: "Kong Gateway 3.4",
     environment: "PROD_SIM", region: "SGP", site: "site-singapore", networkZone: "APP", tier: "TIER_1",
     hostname: "api-sg-01.singapore.nexuscorp.sg", ipAddress: "10.40.20.25", criticality: "HIGH",
-    observedState: { tlsMinVersion: "1.1", cipherStrength: "weak", insecureProtocols: ["http"], certDaysToExpiry: 25, apiAuthEnabled: true, apiRateLimit: true, xmlSignatureValidation: false, plaintextSecrets: false, serviceVersion: "3.4.0" },
+    observedState: { tlsMinVersion: "1.1", cipherStrength: "weak", insecureProtocols: ["http"], legacyProtocols: ["TLSv1.1"], certDaysToExpiry: 25, apiAuthEnabled: true, apiRateLimit: true, xmlSignatureValidation: false, plaintextSecrets: false, serviceVersion: "3.4.0" },
     tags: ["internet-facing"],
   },
   {
     id: "ast-fw-sg-01", name: "FW-SG-01", assetType: "FIREWALL", vendor: "Palo Alto", technology: "PAN-OS 11.1",
     environment: "PROD_SIM", region: "SGP", site: "site-singapore", networkZone: "DMZ", tier: "TIER_1",
     hostname: "fw-sg-01.singapore.nexuscorp.sg", ipAddress: "10.40.1.10", criticality: "CRITICAL",
-    observedState: { firewallAnyRules: 7, privilegedBroadAccess: true, authStrength: "strong", serviceVersion: "11.1.0", latestStableVersion: "11.1.3" },
+    observedState: { firewallAnyRules: 7, privilegedBroadAccess: true, authStrength: "strong", mgmtAccessibleFrom: "0.0.0.0", aclDefaultPolicy: "allow-by-default", serviceVersion: "11.1.0", latestStableVersion: "11.1.3" },
     tags: ["perimeter", "internet-facing"],
   },
   {
@@ -281,7 +281,7 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     id: "ast-cert-sg-01", name: "CERT-SG-01", assetType: "CERTIFICATE", vendor: "DigiCert", technology: "TLS RSA 2048",
     environment: "PROD_SIM", region: "SGP", site: "site-singapore", networkZone: "APP", tier: "TIER_2",
     hostname: "cert.api-sg-01.singapore.nexuscorp.sg", ipAddress: "203.0.113.20", criticality: "HIGH",
-    observedState: { certDaysToExpiry: 40, certExpiry: "2026-10-23T00:00:00.000Z", certIssuer: "DigiCert SHA2 EV" },
+    observedState: { certDaysToExpiry: 25, certExpiry: "2026-10-09T00:00:00.000Z", certIssuer: "DigiCert SHA2 EV" },
     tags: ["internet-facing"],
   },
 ];

@@ -34,6 +34,15 @@ async function heroRemediation() {
   return { c, rem };
 }
 
+async function findingLifecycle(c: Awaited<ReturnType<typeof ctx>>, assetId: string, findingId: string) {
+  const scans = await c.repo.scansForAsset(assetId);
+  for (const scan of scans) {
+    const f = scan.findings.find((x) => x.id === findingId);
+    if (f) return f.lifecycle;
+  }
+  throw new Error(`Finding ${findingId} not found on ${assetId}`);
+}
+
 describe("Closed-loop remediation orchestration (API-GATEWAY-01 TLS-001)", () => {
   beforeAll(async () => {
     await getRepository().reset();
@@ -46,6 +55,11 @@ describe("Closed-loop remediation orchestration (API-GATEWAY-01 TLS-001)", () =>
     expect(rem.proposedAction.actionType).toBe("SET_TLS_MIN_VERSION");
     expect(rem.proposedAction.rollbackAvailable).toBe(true);
     expect(rem.riskBand).toBe("CRITICAL");
+  });
+
+  it("marks the finding REMEDIATION_PLANNED when a remediation is planned", async () => {
+    const { c, rem } = await heroRemediation();
+    expect(await findingLifecycle(c, "ast-api-gateway-01", rem.findingId)).toBe("REMEDIATION_PLANNED");
   });
 
   it("rejects an illegal transition (approve before validation)", async () => {
@@ -84,12 +98,14 @@ describe("Closed-loop remediation orchestration (API-GATEWAY-01 TLS-001)", () =>
     const asset = await c.repo.getAsset("ast-api-gateway-01");
     expect(asset!.observedState.tlsMinVersion).toBe("1.2");
     expect(asset!.stateHistory.some((h) => h.label.startsWith("Remediated:"))).toBe(true);
+    expect(await findingLifecycle(c, "ast-api-gateway-01", rem.findingId)).toBe("REMEDIATED");
 
     const verified = await verifyRemediation(c, rem.id, ACTOR);
     expect(verified.status).toBe("VERIFIED");
     expect(verified.verification?.status).toBe("PASS");
     expect(verified.verification?.after.findingStatus).toBe("PASS");
     expect(verified.verification?.evidenceAfterIds.length).toBeGreaterThan(0);
+    expect(await findingLifecycle(c, "ast-api-gateway-01", rem.findingId)).toBe("VERIFIED");
   });
 
   it("records a complete audit trail for the whole closed loop", async () => {
@@ -131,6 +147,7 @@ describe("Closed-loop remediation orchestration (API-GATEWAY-01 TLS-001)", () =>
     const failed = await verifyRemediation(c, rem.id, ACTOR);
     expect(failed.status).toBe("FAILED");
     expect(failed.verification?.status).toBe("FAIL");
+    expect(await findingLifecycle(c, "ast-api-gateway-01", rem.findingId)).toBe("OPEN");
 
     const rolledBack = await rollbackRemediation(c, rem.id, ACTOR, "Rejected change window drift");
     expect(rolledBack.status).toBe("ROLLED_BACK");

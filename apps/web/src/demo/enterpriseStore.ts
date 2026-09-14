@@ -5,11 +5,13 @@ import type {
   AssetRecord,
   AssetScanRecord,
   AuditEventRecord,
+  ComplianceSummary,
   ConnectorRecord,
   ConnectorTestResult,
   EvidenceRecord,
   EvidenceWithVerification,
   FindingAnalysis,
+  FindingLifecycle,
   RemediationExecutionLogEntry,
   RemediationRecord,
   UserRole,
@@ -28,11 +30,13 @@ import {
   connectorForAsset,
   connectorTypeForAsset,
   evaluateAssetControl,
+  evaluateEvidenceForAsset,
   evidenceIntegrityHash,
   evidenceTypeForControlId,
   explainableRisk,
   exploitabilityWeightOf,
   exposureWeightOfAsset,
+  findingsFromResults,
   getAssetControlById,
   getAssetControls,
   knownEstateRecords,
@@ -246,6 +250,18 @@ function findFinding(state: Persisted, findingId: string): { asset: AssetRecord;
   fail(404, "Finding not found");
 }
 
+function applyFindingLifecycle(state: Persisted, findingId: string, lifecycle: FindingLifecycle): AssetFinding {
+  for (const a of state.assets) {
+    const scan = latestScan(state, a.id);
+    const f = scan?.findings.find((x) => x.id === findingId);
+    if (f) {
+      f.lifecycle = lifecycle;
+      return f;
+    }
+  }
+  fail(404, "Finding not found");
+}
+
 // ---------------------------------------------------------------------------
 // Evaluation helpers (mirror apps/api/src/services/enterprise)
 // ---------------------------------------------------------------------------
@@ -341,36 +357,42 @@ function runScan(state: Persisted, assetId: string, trigger: "manual" | "auto_ve
   }
 
   const controls = getAssetControls();
-  const findings: AssetFinding[] = [];
-  for (const control of controls) {
-    const outcome = evaluateControl(control.id, asset);
-    if (!outcome) continue;
-    if (outcome.status === "PASS" || outcome.status === "NOT_APPLICABLE") continue;
+  const ruleResults = evaluateEvidenceForAsset(asset);
+  const ruleFindings = findingsFromResults(asset, ruleResults);
+
+  const findings: AssetFinding[] = ruleFindings.map((rf) => {
+    const control = getAssetControlById(rf.controlId);
     const finding: AssetFinding = {
-      id: uid(`finding-${control.id.toLowerCase()}`),
+      id: uid(`finding-${rf.controlId.toLowerCase()}`),
       auditId: asset.id,
-      controlId: control.id,
-      controlName: control.name,
-      severity: control.severity,
-      status: outcome.status,
-      what: control.name,
-      why: outcome.reason || control.failureMessage,
+      controlId: rf.controlId,
+      controlName: rf.controlName,
+      severity: rf.severity,
+      status: rf.status,
+      what: rf.what,
+      why: rf.why,
       where: `${asset.hostname} (${asset.ipAddress}) — ${asset.siteLabel}`,
       risk: 0,
       impact: `Impact on ${asset.name} cascades to dependent services; see the asset impact graph.`,
-      recommendedFix: control.remediation,
+      recommendedFix: rf.remediationGuidance ?? control?.remediation,
       evidence: [],
-      references: { controlId: control.id },
+      references: { controlId: rf.controlId },
       assetId: asset.id,
       assetType: asset.assetType,
       evidenceIds: [],
       location: asset.location,
+      lifecycle: rf.lifecycle,
+      observedValue: rf.observedValue,
+      expectedValue: rf.expectedValue,
+      remediationGuidance: rf.remediationGuidance,
     };
-    findings.push(riskFor(finding, asset));
-  }
+    return riskFor(finding, asset);
+  });
 
   const failing = findings.filter((f) => f.status === "FAIL");
   const warnings = findings.filter((f) => f.status === "WARNING");
+  const passed = Math.max(0, ruleResults.filter((r) => r.evaluation.status === "PASS").length);
+  const na = Math.max(0, controls.length - ruleResults.length);
   const overallScore = failing.length
     ? Math.min(100, Math.round(Math.max(...failing.map((f) => f.risk)) * 0.8 + (warnings.length ? 8 : 0)))
     : warnings.length
@@ -381,6 +403,7 @@ function runScan(state: Persisted, assetId: string, trigger: "manual" | "auto_ve
   const exploitability = exploitabilityWeightOf(failing.map((f) => f.controlId));
   const criticality = Math.round((CRITICALITY_WEIGHT[asset.criticality] ?? 50) * 100);
 
+  const evaluated = Math.max(1, passed + failing.length + warnings.length);
   const scan: AssetScanRecord = {
     id: scanId,
     assetId: asset.id,
@@ -404,11 +427,11 @@ function runScan(state: Persisted, assetId: string, trigger: "manual" | "auto_ve
       findings: failing.map((f) => f.controlId),
     },
     compliance: {
-      passed: Math.max(0, controls.length - failing.length - warnings.length),
+      passed,
       failed: failing.length,
       warnings: warnings.length,
-      na: 0,
-      score: Math.round(((controls.length - failing.length - warnings.length) / controls.length) * 100),
+      na,
+      score: Math.round((passed / evaluated) * 100),
     },
     evidenceIds: [],
     trigger,
@@ -492,6 +515,61 @@ export const enterpriseDemo = {
   assetFindings(assetId: string): AssetFinding[] {
     const asset = mustAsset(persisted, assetId);
     return (latestScan(persisted, assetId)?.findings ?? []).map((f) => ({ ...f, assetId: asset.id, assetType: asset.assetType, location: asset.location }));
+  },
+
+  setFindingLifecycle(assetId: string, findingId: string, lifecycle: "ACKNOWLEDGED" | "EXCEPTED" | "OPEN", reason?: string): AssetFinding {
+    mustAsset(persisted, assetId);
+    const finding = applyFindingLifecycle(persisted, findingId, lifecycle);
+    logEvent(persisted, makeEvent("FINDING_LIFECYCLE_CHANGED", "finding", findingId, assetId, finding.controlId, findingId, "human", { lifecycle, reason: reason ?? null }, ACTOR));
+    persist();
+    return finding;
+  },
+
+  complianceSummary(): ComplianceSummary {
+    const totals = { passed: 0, failed: 0, warnings: 0, na: 0 };
+    const byCategoryMap = new Map<string, { passed: number; failed: number; warnings: number }>();
+    const bySeverityMap = new Map<string, number>();
+    const lifecycleMap = new Map<string, number>();
+    let evaluated = 0;
+    for (const asset of persisted.assets) {
+      const results = evaluateEvidenceForAsset(asset);
+      evaluated += results.length;
+      const passed = results.filter((r) => r.evaluation.status === "PASS").length;
+      const failed = results.filter((r) => r.evaluation.status === "FAIL").length;
+      const warnings = results.filter((r) => r.evaluation.status === "WARNING").length;
+      totals.passed += passed;
+      totals.failed += failed;
+      totals.warnings += warnings;
+      for (const r of results) {
+        const c = byCategoryMap.get(r.category) ?? { passed: 0, failed: 0, warnings: 0 };
+        if (r.evaluation.status === "PASS") c.passed += 1;
+        else if (r.evaluation.status === "FAIL") c.failed += 1;
+        else if (r.evaluation.status === "WARNING") c.warnings += 1;
+        byCategoryMap.set(r.category, c);
+      }
+      const scan = latestScan(persisted, asset.id);
+      for (const f of scan?.findings ?? []) {
+        if (f.status === "FAIL" || f.status === "WARNING") {
+          bySeverityMap.set(f.severity, (bySeverityMap.get(f.severity) ?? 0) + 1);
+        }
+        const lc = f.lifecycle ?? "OPEN";
+        lifecycleMap.set(lc, (lifecycleMap.get(lc) ?? 0) + 1);
+      }
+    }
+    totals.na = Math.max(0, persisted.assets.length * getAssetControls().length - evaluated);
+    const score = Math.round(evaluated ? (totals.passed / Math.max(1, totals.passed + totals.failed + totals.warnings)) * 100 : 0);
+    return {
+      total: totals.passed + totals.failed + totals.warnings + totals.na,
+      passed: totals.passed,
+      failed: totals.failed,
+      warnings: totals.warnings,
+      na: totals.na,
+      score,
+      byCategory: [...byCategoryMap.entries()].map(([category, v]) => ({ category, ...v })),
+      bySeverity: [...bySeverityMap.entries()].map(([severity, count]) => ({ severity: severity as AssetFinding["severity"], count })),
+      lifecycleBreakdown: [...lifecycleMap.entries()].map(([lifecycle, count]) => ({ lifecycle: lifecycle as FindingLifecycle, count })),
+      generatedAt: new Date().toISOString(),
+    };
   },
 
   assetEvidence(assetId: string): EvidenceRecord[] {
@@ -653,6 +731,7 @@ export const enterpriseDemo = {
       createdAt: new Date().toISOString(),
     };
     persisted.remediations.push(record);
+    applyFindingLifecycle(persisted, findingId, "REMEDIATION_PLANNED");
     logEvent(persisted, makeEvent("REMEDIATION_PLANNED", "remediation", record.id, asset.id, finding.controlId, findingId, "system", { assetName: asset.name, actionType: proposal.actionType, impact: proposal.impact, rollbackAvailable: proposal.rollbackAvailable }));
     persist();
     return record;
@@ -750,6 +829,7 @@ export const enterpriseDemo = {
     rem.execution.logs = logs;
     rem.execution.message = `${rem.proposedAction.actionType}: ${applied.message}`;
     rem.updatedAt = completedAt;
+    applyFindingLifecycle(persisted, rem.findingId, "REMEDIATED");
     logEvent(persisted, makeEvent("REMEDIATION_EXECUTED", "remediation", rem.id, rem.assetId, rem.controlId, rem.findingId, "human", { actionType: rem.proposedAction.actionType, connector: connector.name, status: "COMPLETED" }, ACTOR));
     persist();
     return rem;
@@ -790,12 +870,14 @@ export const enterpriseDemo = {
       rem.verification.after = { findingStatus: "PASS", riskScore: afterRisk?.score ?? 0, riskBand: afterRisk?.band ?? "LOW", compliance: `Control ${rem.controlId} re-evaluated PASS after remediation.` };
       rem.verification.evidenceAfterIds = evidenceAfter;
       rem.status = "VERIFIED";
+      applyFindingLifecycle(persisted, rem.findingId, "VERIFIED");
       logEvent(persisted, makeEvent("REMEDIATION_VERIFICATION_PASSED", "remediation", rem.id, rem.assetId, rem.controlId, rem.findingId, "system", { actionType: rem.proposedAction.actionType, scanId: scan.id, evidenceAfter: evidenceAfter.length, afterStatus }));
     } else {
       rem.verification.status = "FAIL";
       rem.verification.after = { findingStatus: afterStatus, riskScore: afterRisk?.score ?? rem.riskScore, riskBand: afterRisk?.band ?? rem.riskBand, compliance: `Control ${rem.controlId} still reports ${afterStatus} after remediation.` };
       rem.verification.evidenceAfterIds = evidenceAfter;
       rem.status = "FAILED";
+      applyFindingLifecycle(persisted, rem.findingId, "OPEN");
       logEvent(persisted, makeEvent("REMEDIATION_VERIFICATION_FAILED", "remediation", rem.id, rem.assetId, rem.controlId, rem.findingId, "system", { actionType: rem.proposedAction.actionType, scanId: scan.id, afterStatus, error: scan.error ?? null }));
     }
     rem.updatedAt = new Date().toISOString();
@@ -815,6 +897,7 @@ export const enterpriseDemo = {
     rem.status = "ROLLED_BACK";
     rem.rollback = { available: true, triggered: true, status: "ROLLED_BACK", reason: reason ?? "Verification failed; restoring prior observed state.", restoredState, at: new Date().toISOString() };
     rem.updatedAt = new Date().toISOString();
+    applyFindingLifecycle(persisted, rem.findingId, "OPEN");
     logEvent(persisted, makeEvent("REMEDIATION_ROLLED_BACK", "remediation", rem.id, rem.assetId, rem.controlId, rem.findingId, "system", { actionType: rem.proposedAction.actionType, reason: reason ?? "verification failed" }));
     persist();
     return rem;

@@ -109,6 +109,34 @@ describe("AssetDetailPage — PHASE 2 connector + evidence integrity (jsdom rend
     expect(text).toContain("Analyze");
     act(() => root.unmount());
   });
+
+  it("PHASE 3 — expands the 'Why is this a finding?' panel and flips the finding lifecycle", async () => {
+    const { root, container } = mount();
+    await flush();
+    let text = container.textContent ?? "";
+    expect(text).toContain("Why is this a finding?");
+    expect(text).toContain("lifecycle");
+
+    const whyToggle = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Why is this a finding?"));
+    expect(whyToggle).toBeDefined();
+    await act(async () => whyToggle!.click());
+    await flush();
+    text = container.textContent ?? "";
+    expect(text).toContain("Observed");
+    expect(text).toContain("Expected");
+    expect(text).toContain("Recommended fix");
+
+    const select = container.querySelector("select") as HTMLSelectElement;
+    expect(select).toBeDefined();
+    expect(select.value).toBe("OPEN");
+    await act(async () => {
+      select.value = "ACKNOWLEDGED";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flush();
+    expect(container.textContent ?? "").toContain("ACKNOWLEDGED");
+    act(() => root.unmount());
+  });
 });
 
 describe("ConnectorsPage — PHASE 2 transport/protocol/capabilities chips (jsdom render probe)", () => {

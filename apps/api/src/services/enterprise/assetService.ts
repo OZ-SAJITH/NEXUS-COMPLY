@@ -6,17 +6,22 @@ import type {
   AssetImpactGraph,
   AssetRecord,
   AssetScanRecord,
+  ComplianceSummary,
   ConnectorTestResult,
   EvidenceRecord,
   EvidenceWithVerification,
-  FindingStatus,
+  FindingLifecycle,
+  FindingLifecycleUpdate,
+  Severity,
 } from "@nexus/shared-types";
 import {
   assetRelationships,
   buildImpactGraph,
   collectRawEvidence,
   evaluateAssetControl,
+  evaluateEvidenceForAsset,
   explainableRisk,
+  findingsFromResults,
   getAssetControlById,
   getAssetControls,
   knownEstateRecords,
@@ -30,7 +35,7 @@ import {
   topologyConnections,
   verifyEvidenceRecord,
 } from "@nexus/enterprise-catalog";
-import type { EvalOutcome } from "@nexus/enterprise-catalog";
+import type { EvalOutcome, RuleFinding } from "@nexus/enterprise-catalog";
 import { ApiError } from "../reviewService";
 import { JsonRepository } from "../../storage/jsonRepo";
 import { uniqueId } from "../../utils/helpers";
@@ -46,11 +51,16 @@ import { logEnterpriseEvent, simulatedDelay } from "./events";
 
 const PROTOCOL_HINT: Record<string, string | undefined> = {
   "TLS-001": "https",
-  "PKI-002": "https",
-  "PROTO-003": "http",
-  "CRYPTO-004": "https",
-  "DBENC-005": "postgres",
-  "DBEX-006": "postgres",
+  "CERT-001": "https",
+  "CERT-002": "https",
+  "NET-001": "http",
+  "TLS-002": "https",
+  "CRYPTO-001": "https",
+  "DB-001": "postgres",
+  "DB-002": "postgres",
+  "FW-001": "network",
+  "FW-002": "network",
+  "ACL-001": "network",
   "MQ-016": "amqp",
 };
 
@@ -146,36 +156,26 @@ export async function scanAsset(ctx: Instantiation, assetId: string, opts: { tri
   const now = new Date().toISOString();
   const controls = getAssetControls();
 
-  // PHASE 2 pipeline: connector collection → normalization → compliance eval.
-  // The connector adapter emits RAW evidence for the managed asset; the
-  // normalizer re-types, re-scopes and SHA-256-hashes it. The compliance
-  // engine consumes only normalized evidence.
+  // PHASE 2/3 pipeline: connector collection → normalization → rule engine.
+  // The connector adapter emits RAW evidence; the normalizer re-types,
+  // re-scopes and SHA-256-hashes it. The rule engine then evaluates EVERY
+  // applicable control deterministically against the evidence-sourced observed
+  // state — findings (FAIL + WARNING) carry structured severity, observed and
+  // expected values, and remediation guidance.
   const raw = collectRawEvidence(asset, connector);
   const evidenceList = normalizeEvidence(raw, asset, connector, scanId, now, (prefix) => uniqueId(prefix));
 
-  const findings: AssetFinding[] = [];
-  const counts = { passed: 0, failed: 0, warnings: 0, na: 0 };
+  const ruleResults = evaluateEvidenceForAsset(asset, evidenceList);
+  const ruleFindings = findingsFromResults(asset, ruleResults);
 
-  for (const control of controls) {
-    const evidence = evidenceList.find((e) => e.controlId === control.id);
-    if (!evidence) {
-      counts.na += 1;
-      continue;
-    }
-    if (evidence.status === "PASS") {
-      counts.passed += 1;
-      continue;
-    }
-    if (evidence.status === "WARNING") {
-      counts.warnings += 1;
-      const evalOutcome = evaluateAssetControl(control, asset);
-      findings.push(buildFinding(asset, control.id, evalOutcome, evidence));
-      continue;
-    }
-    counts.failed += 1;
-    const evalOutcome = evaluateAssetControl(control, asset);
-    findings.push(buildFinding(asset, control.id, evalOutcome, evidence));
-  }
+  const findings: AssetFinding[] = ruleFindings.map((f) => buildFindingFromRule(asset, f));
+
+  const counts = {
+    passed: ruleResults.filter((r) => r.evaluation.status === "PASS").length,
+    failed: ruleResults.filter((r) => r.evaluation.status === "FAIL").length,
+    warnings: ruleResults.filter((r) => r.evaluation.status === "WARNING").length,
+    na: controls.length - ruleResults.length,
+  };
 
   for (const f of findings) {
     const ev = evidenceList.find((e) => e.controlId === f.controlId);
@@ -263,40 +263,48 @@ export async function scanAsset(ctx: Instantiation, assetId: string, opts: { tri
   return scan;
 }
 
-function buildFinding(asset: AssetRecord, controlId: string, evalOutcome: EvalOutcome, evidence: EvidenceRecord): AssetFinding {
-  const control = getAssetControlById(controlId)!;
-  const riskExplanation = explainableRisk(asset, control.severity, {
-    evidence: [String(evalOutcome.observedValue), control.description],
-    protocol: PROTOCOL_HINT[controlId],
+function buildFindingFromRule(asset: AssetRecord, ruleFinding: RuleFinding): AssetFinding {
+  const control = getAssetControlById(ruleFinding.controlId);
+  const severity = ruleFinding.severity;
+  const riskExplanation = explainableRisk(asset, severity, {
+    evidence: [ruleFinding.observedValue, control?.description ?? ""],
+    protocol: PROTOCOL_HINT[ruleFinding.controlId],
   });
+  const failed = ruleFinding.status === "FAIL";
   return {
     id: uniqueId("af"),
     auditId: asset.id,
-    controlId: control.id,
-    controlName: control.name,
-    severity: control.severity,
-    status: evalOutcome.status as FindingStatus,
-    what: control.name,
-    why: evalOutcome.reason || control.failureMessage,
+    controlId: ruleFinding.controlId,
+    controlName: ruleFinding.controlName,
+    severity,
+    status: ruleFinding.status,
+    what: ruleFinding.what,
+    why: ruleFinding.why,
     where: `${asset.hostname} (${asset.ipAddress}) — ${asset.siteLabel}`,
-    risk: evalOutcome.status === "FAIL" ? riskExplanation.score : Math.max(20, Math.round(riskExplanation.score / 2)),
+    risk: failed ? riskExplanation.score : Math.max(20, Math.round(riskExplanation.score / 2)),
     impact: `Impact on ${asset.name} cascades to dependent services; see the asset impact graph.`,
-    recommendedFix: control.remediation,
-    evidence: [
-      {
-        file: evidence.rawReference,
-        lineStart: 0,
-        lineEnd: 0,
-        snippet: `observed=${evidence.observedValue} expected=${evidence.expectedValue}`,
-        reason: evidence.rawReference,
-      },
-    ],
-    references: { controlId: control.id },
+    recommendedFix: ruleFinding.remediationGuidance || control?.remediation || "",
+    evidence: ruleFinding.evidenceId
+      ? [
+          {
+            file: ruleFinding.controlId,
+            lineStart: 0,
+            lineEnd: 0,
+            snippet: `observed=${ruleFinding.observedValue} expected=${ruleFinding.expectedValue}`,
+            reason: ruleFinding.why,
+          },
+        ]
+      : [],
+    references: { controlId: ruleFinding.controlId },
     assetId: asset.id,
-    evidenceIds: [evidence.id],
+    evidenceIds: ruleFinding.evidenceId ? [ruleFinding.evidenceId] : [],
     assetType: asset.assetType,
     location: asset.location,
     riskExplanation,
+    lifecycle: ruleFinding.lifecycle,
+    observedValue: ruleFinding.observedValue,
+    expectedValue: ruleFinding.expectedValue,
+    remediationGuidance: ruleFinding.remediationGuidance || control?.remediation,
   };
 }
 
@@ -399,6 +407,110 @@ export async function assetFindings(ctx: Instantiation, assetId: string): Promis
   if (scans.length === 0) return [];
   const latest = scans[0];
   return latest.findings.map((f) => ({ ...f, assetId: asset.id, assetType: asset.assetType, location: asset.location }));
+}
+
+/**
+ * PHASE 3 finding lifecycle: transitions a finding to a human-set lifecycle
+ * (ACKNOWLEDGED / EXCEPTED / OPEN) or back to OPEN. Remediation orchestration
+ * drives the PLANNED → REMEDIATED → VERIFIED transitions via its own wiring.
+ */
+export async function setFindingLifecycle(
+  ctx: Instantiation,
+  assetId: string,
+  findingId: string,
+  update: FindingLifecycleUpdate,
+): Promise<AssetFinding> {
+  const finding = await applyFindingLifecycle(ctx, assetId, findingId, update.lifecycle);
+  await logEnterpriseEvent({
+    eventType: "FINDING_LIFECYCLE_CHANGED",
+    entityType: "finding",
+    entityId: findingId,
+    findingId,
+    auditId: assetId,
+    controlId: finding.controlId,
+    source: "human",
+    detail: { lifecycle: update.lifecycle, reason: update.reason, assetId },
+  });
+  return finding;
+}
+
+/**
+ * Low-level lifecycle mutator shared by the human API and the remediation
+ * orchestrator. Locates the finding in whichever scan holds it and persists the
+ * updated scan atomically.
+ */
+export async function applyFindingLifecycle(ctx: Instantiation, assetId: string, findingId: string, lifecycle: FindingLifecycle): Promise<AssetFinding> {
+  await requireAsset(ctx, assetId);
+  const scan = (await ctx.repo.scansForAsset(assetId)).find((s) => s.findings.some((f) => f.id === findingId));
+  if (!scan) throw new ApiError(404, "Finding not found");
+  const finding = scan.findings.find((f) => f.id === findingId)!;
+  finding.lifecycle = lifecycle;
+  await ctx.repo.saveAssetScan(scan);
+  return finding;
+}
+
+/**
+ * PHASE 3 compliance summary: deterministic, evidence-grounded posture across
+ * the ENTIRE managed estate. Counts are derived by re-running the rule engine
+ * against each asset's persisted evidence — never stored snapshots.
+ */
+export async function complianceSummary(ctx: Instantiation): Promise<ComplianceSummary> {
+  const assets = await ensureAssets(ctx);
+  const byCategory = new Map<string, { passed: number; failed: number; warnings: number }>();
+  const bySeverity = new Map<Severity, number>();
+  const lifecycleBreakdown = new Map<FindingLifecycle, number>();
+  let passed = 0;
+  let failed = 0;
+  let warnings = 0;
+  let na = 0;
+  const controlCount = getAssetControls().length;
+
+  for (const asset of assets) {
+    const evidence = await ctx.repo.evidenceForAsset(asset.id);
+    const results = evaluateEvidenceForAsset(asset, evidence);
+    na += controlCount - results.length;
+    const findings = findingsFromResults(asset, results);
+    const byControl = new Set(findings.map((f) => f.controlId));
+    for (const r of results) {
+      if (r.evaluation.status === "PASS") {
+        passed += 1;
+        const e = byCategory.get(r.category) ?? { passed: 0, failed: 0, warnings: 0 };
+        e.passed += 1;
+        byCategory.set(r.category, e);
+        continue;
+      }
+      if (r.evaluation.status === "FAIL") failed += 1;
+      else if (r.evaluation.status === "WARNING") warnings += 1;
+      const e = byCategory.get(r.category) ?? { passed: 0, failed: 0, warnings: 0 };
+      if (r.evaluation.status === "FAIL") e.failed += 1;
+      else if (r.evaluation.status === "WARNING") e.warnings += 1;
+      byCategory.set(r.category, e);
+      if (byControl.has(r.ruleId)) bySeverity.set(r.severity, (bySeverity.get(r.severity) ?? 0) + 1);
+    }
+    const scans = await ctx.repo.scansForAsset(asset.id);
+    const latest = scans[0];
+    if (latest) {
+      for (const f of latest.findings) {
+        const l = f.lifecycle ?? "OPEN";
+        lifecycleBreakdown.set(l, (lifecycleBreakdown.get(l) ?? 0) + 1);
+      }
+    }
+  }
+
+  const evaluated = passed + failed + warnings;
+  const score = evaluated > 0 ? Math.round((passed / evaluated) * 100) : 100;
+  return {
+    total: passed + failed + warnings + na,
+    passed,
+    failed,
+    warnings,
+    na,
+    score,
+    byCategory: [...byCategory.entries()].map(([category, counts]) => ({ category, ...counts })),
+    bySeverity: [...bySeverity.entries()].map(([severity, count]) => ({ severity, count })),
+    lifecycleBreakdown: [...lifecycleBreakdown.entries()].map(([lifecycle, count]) => ({ lifecycle, count })),
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 export async function assetImpact(ctx: Instantiation, assetId: string): Promise<AssetImpactGraph> {

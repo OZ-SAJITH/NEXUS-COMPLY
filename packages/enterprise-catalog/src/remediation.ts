@@ -187,20 +187,25 @@ export function isActionAllowedForAsset(actionType: RemediationActionType, asset
 export function defaultActionForControl(controlId: string): RemediationActionType | undefined {
   const map: Record<string, RemediationActionType> = {
     "TLS-001": "SET_TLS_MIN_VERSION",
-    "PKI-002": "REVOKE_AND_RENEW_CERTIFICATE",
-    "PROTO-003": "DISABLE_INSECURE_PROTOCOL",
-    "CRYPTO-004": "ENFORCE_STRONG_CIPHERS",
-    "DBENC-005": "ENABLE_DB_ENCRYPTION",
-    "DBEX-006": "RESTRICT_DB_BIND",
-    "FW-007": "CONSOLIDATE_FIREWALL_RULE",
-    "AUTH-008": "ENFORCE_STRONG_AUTH",
-    "INTEG-009": "ENABLE_INTEGRITY_VALIDATION",
+    "CERT-001": "REVOKE_AND_RENEW_CERTIFICATE",
+    "CERT-002": "REVOKE_AND_RENEW_CERTIFICATE",
+    "NET-001": "DISABLE_INSECURE_PROTOCOL",
+    "TLS-002": "DISABLE_INSECURE_PROTOCOL",
+    "CRYPTO-001": "ENFORCE_STRONG_CIPHERS",
+    "DB-001": "ENABLE_DB_ENCRYPTION",
+    "DB-002": "RESTRICT_DB_BIND",
+    "FW-001": "CONSOLIDATE_FIREWALL_RULE",
+    "FW-002": "CONSOLIDATE_FIREWALL_RULE",
+    "ACL-001": "CONSOLIDATE_FIREWALL_RULE",
+    "AUTH-001": "ENFORCE_STRONG_AUTH",
+    "INTEGRITY-001": "ENABLE_INTEGRITY_VALIDATION",
     "XMLSIG-010": "ENABLE_XML_SIGNATURE_VALIDATION",
-    "API-011": "SECURE_API_CONFIG",
+    "API-001": "SECURE_API_CONFIG",
+    "API-002": "SECURE_API_CONFIG",
     "DATA-012": "ROTATE_AND_SCREEN_SECRETS",
-    "PRIV-013": "RESTRICT_PRIVILEGED_ACCESS",
+    "ACCESS-001": "RESTRICT_PRIVILEGED_ACCESS",
     "OUTDATE-014": "UPGRADE_SERVICE_VERSION",
-    "CHECKSUM-015": "RESTORE_BASELINE_HASH",
+    "CONFIG-001": "RESTORE_BASELINE_HASH",
     "MQ-016": "SECURE_MESSAGE_QUEUE",
   };
   return map[controlId];
@@ -270,7 +275,8 @@ export function applyRemediationAction(asset: AssetRecord, action: RemediationAc
     }
     case "DISABLE_INSECURE_PROTOCOL": {
       next.insecureProtocols = [];
-      return { state: next, message: "Insecure protocols disabled." };
+      next.legacyProtocols = [];
+      return { state: next, message: "Insecure and legacy protocols disabled." };
     }
     case "ENFORCE_STRONG_CIPHERS": {
       next.cipherStrength = "strong";
@@ -286,7 +292,9 @@ export function applyRemediationAction(asset: AssetRecord, action: RemediationAc
     }
     case "CONSOLIDATE_FIREWALL_RULE": {
       next.firewallAnyRules = 0;
-      return { state: next, message: "Excessive firewall rules consolidated to least-privilege." };
+      next.mgmtAccessibleFrom = "internal";
+      next.aclDefaultPolicy = "deny-by-default";
+      return { state: next, message: "Excessive firewall rules consolidated; mgmt exposure closed; ACL default deny enforced." };
     }
     case "ENFORCE_STRONG_AUTH": {
       next.authStrength = "mfa";
