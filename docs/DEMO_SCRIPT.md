@@ -35,7 +35,7 @@ The landing dashboard shows **real aggregates**:
 
 ## 5. Reports & the models (30s)
 - On any audit, open **Report** tab → self-contained printable HTML with branding → judge's browser **Print → Save as PDF**.
-- Mention file evidence + explainable risk formula and the 137 tests (`npm test`: API 105 + Web 32).
+- Mention file evidence + explainable risk formula and the 138 tests (`npm test`: API 105 + Web 33).
 
 ## 6. Global Adaptive Governance — PHASE 4 (60s)
 - Sidebar → **Enterprise** → **Governance** (portrait: Global policy, Adaptive).
@@ -44,6 +44,7 @@ The landing dashboard shows **real aggregates**:
 - **Regional policy profiles**: Global Baseline + 5 regional policies; an asset selects deterministically by region (refresh-safe).
 - **Asset decision trace**: pick **API-GATEWAY-01** → policy **INDIA_ENTERPRISE**, 14 applicable controls, 14 findings. Open the asset.
 - On the asset's **Adaptive Governance** panel: controls grid with `whyApplicable` per control; under Governance exceptions click **Request exception** (pick `TLS-001`, reason, 30 days) → status **REQUESTED** → **Approve** → notice *"renders FAIL + EXCEPTION APPROVED until …"*. Never a silent PASS.
+- Further down the asset page: **Impact cascade** — API-GATEWAY-01 → dependent service/application/database nodes → **Business impact** (Customer PII / Payment border), with the blast-radius summary lines. *An approved exception still shows its downstream blast radius.*
 - Back to **Enterprise → Audit Trail**: filter `Governance exception decided` → the decision is timestamped, actor-attributed, append-only. Dashboard **Regional & framework posture** panel echoes the same numbers.
 > Speak to: *the policy is data, not code — swap a regional profile and the applicability engine re-derives the posture; exceptions are governed decisions, so a FAIL stays visible as FAIL + EXCEPTION APPROVED.*
 

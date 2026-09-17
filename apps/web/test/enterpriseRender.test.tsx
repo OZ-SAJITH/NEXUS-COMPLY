@@ -271,6 +271,17 @@ describe("AssetDetailPage — PHASE 4 Adaptive Governance panel (jsdom render pr
     expect([...container.querySelectorAll("button")].some((b) => b.textContent?.includes("Request exception"))).toBe(true);
     act(() => root.unmount());
   });
+
+  it("renders the impact cascade for the hero asset", async () => {
+    const { root, container } = mount();
+    await flush();
+    const text = container.textContent ?? "";
+    expect(text).toContain("Impact cascade");
+    expect(text).toContain("Business impact");
+    expect(text).toContain("propagates to");
+    expect(text).toContain("simulated cascade");
+    act(() => root.unmount());
+  });
 });
 
 describe("DashboardPage — PHASE 4 regional & framework posture panel (jsdom render probe)", () => {

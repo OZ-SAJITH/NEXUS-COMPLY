@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, ScanSearch, BrainCircuit, Scale } from "lucide-react";
-import type { ApplicableControlsResult, AssetConnectorProfile, AssetRecord, AssetScanRecord, EvidenceRecord, EvidenceWithVerification, FindingAnalysis, GovernanceDecisionTrace, GovernanceException, PolicySelection, RemediationRecord } from "@nexus/shared-types";
+import type { ApplicableControlsResult, AssetConnectorProfile, AssetImpactGraph, AssetRecord, AssetScanRecord, EvidenceRecord, EvidenceWithVerification, FindingAnalysis, GovernanceDecisionTrace, GovernanceException, PolicySelection, RemediationRecord } from "@nexus/shared-types";
 import { api } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { PageHeader } from "../../components/PageHeader";
@@ -15,6 +15,7 @@ import { GovernanceExceptionBadge } from "../../components/assets/GovernanceExce
 import { EvidenceInspector } from "../../components/assets/EvidenceInspector";
 import { ConnectorHealthList } from "../../components/assets/ConnectorHealthList";
 import { RiskExplainCard } from "../../components/assets/RiskExplainCard";
+import { ImpactGraphView } from "../../components/assets/ImpactGraphView";
 
 function GovernancePanel({ assetId, findingControls }: { assetId: string; findingControls: Array<{ controlId: string; controlName: string }> }) {
   const [evalState, setEvalState] = useState<{ policy: PolicySelection; applicableControls: ApplicableControlsResult; trace: GovernanceDecisionTrace; exceptions: GovernanceException[] } | null>(null);
@@ -231,7 +232,8 @@ export default function AssetDetailPage() {
   const { data: asset, loading, error, refresh } = useAsyncData<AssetRecord>(() => api.enterprise.asset(id), [id]);
   const { data: scans, refresh: refreshScans } = useAsyncData<AssetScanRecord[]>(() => api.enterprise.assetScans(id), [id]);
   const { data: evidence, refresh: refreshEvidence } = useAsyncData<EvidenceRecord[]>(() => api.enterprise.assetEvidence(id), [id]);
-  const { data: connectorProfile, refresh: refreshConnector } = useAsyncData<AssetConnectorProfile>(() => api.enterprise.assetConnector(id), [id]);
+const { data: connectorProfile, refresh: refreshConnector } = useAsyncData<AssetConnectorProfile>(() => api.enterprise.assetConnector(id), [id]);
+  const { data: impact } = useAsyncData<AssetImpactGraph>(() => api.enterprise.assetImpact(id) as Promise<AssetImpactGraph>, [id]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [analysis, setAnalysis] = useState<FindingAnalysis | null>(null);
@@ -410,6 +412,13 @@ export default function AssetDetailPage() {
           No scan on record — run a scan to generate findings, evidence and risk.
         </div>
       )}
+
+      {impact ? (
+        <section>
+          <SectionTitle sub="Asset → service → application → database → business blast-radius from the simulated asset graph">Impact cascade</SectionTitle>
+          <ImpactGraphView graph={impact} />
+        </section>
+      ) : null}
 
       {findings.length > 0 ? (
         <section>

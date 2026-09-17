@@ -103,7 +103,7 @@ The enterprise exception routes are scoped under `/enterprise/governance/excepti
 
 Framework catalog (6, shape, 404), policy profiles (6, enabled frameworks), deterministic policy selection, applicable controls against a scanned asset, full governance decision trace, exception lifecycle (REQUESTED → APPROVED → control FAIL + EXCEPTION APPROVED → EXPIRED), compliance summary with byRegion/byFramework and PASS controls counted.
 
-### Web — 32 tests, 2 files
+### Web — 33 tests, 2 files
 
 `test/enterpriseParity.test.ts` (21) — discovery asserts the **15-asset** regional wave (API-NY-01 added); 5 new PHASE 4 parity tests: framework catalog + 404, policies + deterministic selection, asset governance trace + per-framework + applicable controls + evaluate, exception lifecycle via the REST surface (request → approve → list **plus the two GOVERNANCE_EXCEPTION_* audit events**), compliance summary byRegion/byFramework with PASS counted. `test/enterpriseRender.test.tsx` (11) — jsdom render probes: connector panel + connection test + verified evidence rows, "Why is this a finding?" panel + lifecycle selector, ConnectorsPage transport/protocol/capability chips + degraded→ONLINE, plus **4 new PHASE 4 probes** — GovernancePage hub (regime posture, framework catalog, policy profiles, auto-loading asset decision trace, exception registry), AssetDetailPage Adaptive Governance panel (policy selection → INDIA_ENTERPRISE, 14 applicable controls, exception governance actions), DashboardPage regional & framework posture panel (adds an `IntersectionObserver` stub for the motion components), and EnterpriseAuditPage governance-exception chips in the ledger.
 
@@ -111,7 +111,7 @@ Framework catalog (6, shape, 404), policy profiles (6, enabled frameworks), dete
 
 - API `tsc -p tsconfig.json` clean; API `npm run build` clean.
 - Web `tsc --noEmit` clean; `vite build` (5.4.21) clean.
-- Full suites: API 105/105, Web 32/32.
+- Full suites: API 105/105, Web 33/33.
 
 ## 11b. Frontend surfacing (follow-up, shipped)
 
