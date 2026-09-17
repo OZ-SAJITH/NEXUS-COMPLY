@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Scale, Layers, ShieldCheck, FileText, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
-import type { ApplicableControlsResult, ComplianceFramework2, ComplianceSummary, GovernanceDecisionTrace, GovernanceException, PolicyProfile, PolicySelection } from "@nexus/shared-types";
+import type { ApplicableControlsResult, AssetRecord, ComplianceFramework2, ComplianceSummary, GovernanceDecisionTrace, GovernanceException, PolicyProfile, PolicySelection } from "@nexus/shared-types";
 import { api } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { PageHeader } from "../../components/PageHeader";
@@ -11,6 +11,7 @@ import { cn, timeAgo } from "../../utils/cn";
 import { currentUser } from "../../session";
 import { GovernanceExceptionBadge } from "../../components/assets/GovernanceExceptionBadge";
 import { PostureCards } from "../../components/assets/PostureCards";
+import { AssetCard } from "../../components/assets/AssetCard";
 
 function FrameworkCatalog({ frameworks }: { frameworks: ComplianceFramework2[] }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -106,7 +107,7 @@ interface EvalState {
   exceptions: GovernanceException[];
 }
 
-function AssetDecisionTrace({ assets }: { assets: Array<{ id: string; name: string; regionLabel: string }> }) {
+function AssetDecisionTrace({ assets }: { assets: AssetRecord[] }) {
   const [assetId, setAssetId] = useState(assets[0]?.id ?? "");
   const [evalState, setEvalState] = useState<EvalState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -157,6 +158,8 @@ function AssetDecisionTrace({ assets }: { assets: Array<{ id: string; name: stri
     );
   }
 
+  const selectedAsset = assets.find((a) => a.id === assetId);
+
   return (
     <section>
       <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -169,7 +172,9 @@ function AssetDecisionTrace({ assets }: { assets: Array<{ id: string; name: stri
             <option key={a.id} value={a.id}>{a.name} — {a.regionLabel}</option>
           ))}
         </select>
-        <Link to={`/app/enterprise/assets/${assetId}`} className="text-xs text-accent hover:underline">Open asset →</Link>
+        {selectedAsset ?
+          <AssetCard asset={selectedAsset} className="!p-3 w-64" />
+          : <Link to={`/app/enterprise/assets/${assetId}`} className="text-xs text-accent hover:underline">Open asset →</Link>}
       </div>
       {error ? <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">{error}</div> : null}
       {evalState ? (
@@ -318,13 +323,10 @@ function PostureStrip({ summary }: { summary: ComplianceSummary }) {
 export default function GovernancePage() {
   const { data: frameworks, loading: fwLoading, error: fwError, refresh: refreshFrameworks } = useAsyncData<ComplianceFramework2[]>(() => api.enterprise.frameworks(), []);
   const { data: policies, error: polError, refresh: refreshPolicies } = useAsyncData<PolicyProfile[]>(() => api.enterprise.listPolicies(), []);
-  const { data: assets, error: assetsError, refresh: refreshAssets } = useAsyncData<AssetOptions[]>(() => api.enterprise.assets(), []);
+  const { data: assets, error: assetsError, refresh: refreshAssets } = useAsyncData<AssetRecord[]>(() => api.enterprise.assets(), []);
   const { data: summary } = useAsyncData<ComplianceSummary>(() => api.enterprise.complianceSummary(), []);
 
-  const assetOptions: AssetOptions[] = useMemo(
-    () => (assets ?? []).map((a) => ({ id: a.id, name: a.name, regionLabel: a.regionLabel ?? "" })),
-    [assets]
-  );
+  const assetOptions: AssetRecord[] = useMemo(() => assets ?? [], [assets]);
 
   if (fwLoading && !frameworks) return <LoadingState label="Loading governance…" />;
   if (fwError && !frameworks) return <ErrorState title="Could not load governance" detail={fwError} onRetry={refreshFrameworks} />;
@@ -352,10 +354,4 @@ export default function GovernancePage() {
       <ExceptionRegistry />
     </div>
   );
-}
-
-interface AssetOptions {
-  id: string;
-  name: string;
-  regionLabel: string;
 }

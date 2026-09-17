@@ -8,6 +8,8 @@ import ConnectorsPage from "../src/pages/enterprise/ConnectorsPage";
 import GovernancePage from "../src/pages/enterprise/GovernancePage";
 import DashboardPage from "../src/pages/DashboardPage";
 import EnterpriseAuditPage from "../src/pages/enterprise/EnterpriseAuditPage";
+import { AssetCard } from "../src/components/assets/AssetCard";
+import { AssetStatusChip } from "../src/components/assets/AssetStatusChip";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -252,6 +254,58 @@ describe("GovernancePage — PHASE 4 adaptive governance hub (jsdom render probe
     const selects = [...container.querySelectorAll("select")];
     expect(selects.length).toBeGreaterThan(0);
     expect(selects[0].value).not.toBe("");
+    expect([...container.querySelectorAll("a")].some((l) => l.getAttribute("href") === `/app/enterprise/assets/${HERO}`)).toBe(true);
+    act(() => root.unmount());
+  });
+});
+
+describe("AssetCard / AssetStatusChip — shared components/assets (jsdom render probe)", () => {
+  it("renders the four criticality tones from the shared chip", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <>
+          <AssetStatusChip criticality="CRITICAL" />
+          <AssetStatusChip criticality="HIGH" />
+          <AssetStatusChip criticality="MEDIUM" />
+          <AssetStatusChip criticality="LOW" />
+          <AssetStatusChip criticality="CRITICAL" size="sm" />
+        </>
+      );
+    });
+    await flush();
+    const text = container.textContent ?? "";
+    expect(text).toContain("CRITICAL");
+    expect(text).toContain("HIGH");
+    expect(text).toContain("MEDIUM");
+    expect(text).toContain("LOW");
+    const chips = [...container.querySelectorAll("span")].filter((c) => c.textContent === "CRITICAL");
+    expect(chips.length).toBe(2);
+    act(() => root.unmount());
+  });
+
+  it("renders a linked asset card that navigates into the enterprise detail", async () => {
+    const asset = enterpriseDemo.assetById(HERO);
+    expect(asset).toBeDefined();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/app/enterprise/governance"]}>
+          <AssetCard asset={asset!} />
+        </MemoryRouter>
+      );
+    });
+    await flush();
+    const text = container.textContent ?? "";
+    expect(text).toContain(asset!.name);
+    expect(text).toContain(asset!.hostname);
+    expect(text).toContain(asset!.criticality);
+    const link = container.querySelector("a");
+    expect(link?.getAttribute("href")).toBe(`/app/enterprise/assets/${HERO}`);
     act(() => root.unmount());
   });
 });

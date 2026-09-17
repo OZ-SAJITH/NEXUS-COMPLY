@@ -1,6 +1,7 @@
 import { AppWindow, ArrowRight, Boxes, Briefcase, ChevronRight, Database, Server } from "lucide-react";
-import type { AssetImpactGraph, AssetCriticality, ImpactNode } from "@nexus/shared-types";
+import type { AssetImpactGraph, ImpactNode } from "@nexus/shared-types";
 import { cn } from "../../utils/cn";
+import { AssetStatusChip } from "./AssetStatusChip";
 
 const KIND_META: Record<ImpactNode["kind"], { label: string; icon: typeof Boxes; cls: string }> = {
   asset: { label: "Managed asset", icon: Boxes, cls: "border-sky-500/40 bg-sky-500/10 text-sky-300" },
@@ -9,13 +10,6 @@ const KIND_META: Record<ImpactNode["kind"], { label: string; icon: typeof Boxes;
   database: { label: "Database", icon: Database, cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" },
   business: { label: "Business impact", icon: Briefcase, cls: "border-amber-500/40 bg-amber-500/10 text-amber-300" },
   data: { label: "Data", icon: Database, cls: "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300" },
-};
-
-const CRITICALITY_STYLE: Record<AssetCriticality, string> = {
-  CRITICAL: "border-red-500/40 bg-red-500/10 text-red-300",
-  HIGH: "border-orange-500/40 bg-orange-500/10 text-orange-300",
-  MEDIUM: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-  LOW: "border-slate-500/40 bg-slate-500/10 text-slate-400",
 };
 
 function ImpactNodeCard({ node, isRoot }: { node: ImpactNode; isRoot: boolean }) {
@@ -31,7 +25,7 @@ function ImpactNodeCard({ node, isRoot }: { node: ImpactNode; isRoot: boolean })
       <div className="text-[10px] text-slate-500 mt-0.5">{node.detail}</div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         <span className="px-1 py-0.5 rounded border border-slate-500/30 bg-slate-500/5 text-[9px] uppercase tracking-wider text-slate-400">{meta.label}</span>
-        {node.criticality ? <span className={cn("px-1 py-0.5 rounded border text-[9px] font-semibold uppercase tracking-wider", CRITICALITY_STYLE[node.criticality])}>{node.criticality}</span> : null}
+        {node.criticality ? <AssetStatusChip criticality={node.criticality} size="sm" /> : null}
       </div>
     </div>
   );

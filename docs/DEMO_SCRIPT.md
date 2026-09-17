@@ -35,7 +35,7 @@ The landing dashboard shows **real aggregates**:
 
 ## 5. Reports & the models (30s)
 - On any audit, open **Report** tab → self-contained printable HTML with branding → judge's browser **Print → Save as PDF**.
-- Mention file evidence + explainable risk formula and the 146 tests (`npm test`: API 113 + Web 33).
+- Mention file evidence + explainable risk formula and the 148 tests (`npm test`: API 113 + Web 35).
 
 ## 6. Global Adaptive Governance — PHASE 4 (60s)
 - Sidebar → **Enterprise** → **Governance** (portrait: Global policy, Adaptive).

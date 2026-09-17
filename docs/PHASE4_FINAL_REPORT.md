@@ -111,7 +111,7 @@ Framework catalog (6, shape, 404), policy profiles (6, enabled frameworks), dete
 
 - API `tsc -p tsconfig.json` clean; API `npm run build` clean.
 - Web `tsc --noEmit` clean; `vite build` (5.4.21) clean.
-- Full suites: API 113/113, Web 33/33.
+- Full suites: API 113/113, Web 35/35.
 
 ## 11b. Frontend surfacing (follow-up, shipped)
 

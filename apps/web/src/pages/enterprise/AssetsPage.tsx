@@ -1,21 +1,15 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, RefreshCw, Radar, Globe2, ShieldAlert } from "lucide-react";
-import type { AssetCriticality, AssetRecord, ConnectorRecord, ConnectorStatus } from "@nexus/shared-types";
+import type { AssetRecord, ConnectorRecord, ConnectorStatus } from "@nexus/shared-types";
 import { api } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { PageHeader } from "../../components/PageHeader";
 import { LoadingState, ErrorState, EmptyState } from "../../components/states";
 import { SeverityBadge, StatusBadge, Stat, Progress, SectionTitle } from "../../components/ui";
 import { EnterpriseTabs, DiscoveryStageBadge } from "./EnterpriseTabs";
+import { AssetStatusChip } from "../../components/assets/AssetStatusChip";
 import { timeAgo } from "../../utils/cn";
-
-const CRITICALITY_STYLE: Record<AssetCriticality, string> = {
-  CRITICAL: "text-red-400 border-red-500/40 bg-red-500/10",
-  HIGH: "text-orange-400 border-orange-500/40 bg-orange-500/10",
-  MEDIUM: "text-amber-400 border-amber-500/40 bg-amber-500/10",
-  LOW: "text-slate-400 border-slate-500/40 bg-slate-500/10",
-};
 
 const ACTIVE_STAGES = new Set(["IDENTIFIED", "CONNECTABLE", "SCANNABLE", "MONITORED", "COMPLIANT", "NON_COMPLIANT"]);
 
@@ -317,7 +311,7 @@ export default function AssetsPage() {
                     <td className="px-4 py-3 text-xs text-slate-400">{a.environment}</td>
                     <td className="px-4 py-3 text-xs text-slate-400">{a.location.tier}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-semibold uppercase tracking-wide ${CRITICALITY_STYLE[a.criticality]}`}>{a.criticality}</span>
+                      <AssetStatusChip criticality={a.criticality} />
                     </td>
                     <td className="px-4 py-3"><DiscoveryStageBadge stage={a.discoveryStatus} /></td>
                     <td className="px-4 py-3"><ConnectorCell asset={a} connectors={conns} /></td>
