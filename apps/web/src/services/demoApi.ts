@@ -1,4 +1,4 @@
-import type { ConfigurationRecord, OrganizationProfile } from "@nexus/shared-types";
+import type { ConfigurationRecord, GovernanceExceptionDecision, GovernanceExceptionRequest, OrganizationProfile } from "@nexus/shared-types";
 import { DemoApiError, reviewAggregate, listAudits, getAudit, createAudit, getDashboardStats, getFinding, getExposurePaths, simulateRemediation, interpret, aiInterpretTransition, listReviewQueue, getReviewDetail, getAuditTrail, approveFinding, rejectFinding, requestChanges, modifyFinding, reopenFinding, finalizeAudit, listConfigurations, listSamples, reportHtml } from "../demo/demoStore";
 import { latestState } from "../demo/demoStore";
 import {
@@ -142,6 +142,9 @@ const HANDLERS: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   { method: "POST", pattern: /^\/assets\/([^/]+)\/findings\/([^/]+)\/lifecycle$/, handler: (body, _q, m) => enterpriseDemo.setFindingLifecycle(m[1], m[2], (body as { lifecycle: "ACKNOWLEDGED" | "EXCEPTED" | "OPEN"; reason?: string })?.lifecycle ?? "OPEN", (body as { reason?: string })?.reason) },
   { method: "GET", pattern: /^\/assets\/([^/]+)\/scans$/, handler: (_b, _q, m) => enterpriseDemo.assetScans(m[1]) },
   { method: "GET", pattern: /^\/assets\/([^/]+)\/impact$/, handler: (_b, _q, m) => enterpriseDemo.assetImpact(m[1]) },
+  { method: "GET", pattern: /^\/assets\/([^/]+)\/governance$/, handler: (_b, _q, m) => enterpriseDemo.assetGovernance(m[1]) },
+  { method: "GET", pattern: /^\/assets\/([^/]+)\/frameworks$/, handler: (_b, _q, m) => enterpriseDemo.assetFrameworks(m[1]) },
+  { method: "GET", pattern: /^\/assets\/([^/]+)\/applicable-controls$/, handler: (_b, _q, m) => enterpriseDemo.assetApplicableControls(m[1]) },
   { method: "GET", pattern: /^\/enterprise\/topology$/, handler: () => enterpriseDemo.topology() },
   { method: "GET", pattern: /^\/enterprise\/compliance-summary$/, handler: () => enterpriseDemo.complianceSummary() },
   { method: "GET", pattern: /^\/connectors$/, handler: () => enterpriseDemo.listConnectors() },
@@ -154,6 +157,17 @@ const HANDLERS: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   { method: "GET", pattern: /^\/evidence\/([^/]+)$/, handler: (_b, _q, m) => need(enterpriseDemo.evidenceById(m[1]), "Evidence record not found") },
   { method: "GET", pattern: /^\/asset-controls$/, handler: () => enterpriseDemo.controls() },
   { method: "GET", pattern: /^\/frameworks$/, handler: () => enterpriseDemo.frameworks() },
+  { method: "GET", pattern: /^\/frameworks\/([^/]+)$/, handler: (_b, _q, m) => enterpriseDemo.frameworkById(m[1]) },
+  { method: "GET", pattern: /^\/policies$/, handler: () => enterpriseDemo.listPolicies() },
+  { method: "GET", pattern: /^\/policies\/([^/]+)$/, handler: (_b, _q, m) => enterpriseDemo.policyById(m[1]) },
+  { method: "POST", pattern: /^\/governance\/policy\/select$/, handler: (body) => enterpriseDemo.selectPolicy((body as { assetId: string })?.assetId ?? "") },
+  { method: "GET", pattern: /^\/governance\/evaluate\/([^/]+)$/, handler: (_b, _q, m) => {
+      const assetId = m[1];
+      return { assetId, policy: enterpriseDemo.selectPolicy(assetId), applicableControls: enterpriseDemo.assetApplicableControls(assetId), trace: enterpriseDemo.assetGovernance(assetId), exceptions: enterpriseDemo.listExceptions(assetId) };
+    } },
+  { method: "GET", pattern: /^\/enterprise\/governance\/exceptions$/, handler: () => enterpriseDemo.listExceptions() },
+  { method: "POST", pattern: /^\/enterprise\/governance\/exceptions$/, handler: (body) => enterpriseDemo.requestException(body as GovernanceExceptionRequest) },
+  { method: "POST", pattern: /^\/enterprise\/governance\/exceptions\/([^/]+)\/decide$/, handler: (body, _q, m) => enterpriseDemo.decideException({ ...(body as Record<string, unknown>), exceptionId: m[1] } as GovernanceExceptionDecision) },
   { method: "POST", pattern: /^\/findings\/([^/]+)\/analyze$/, handler: (_b, _q, m) => enterpriseDemo.analyze(m[1]) },
   { method: "GET", pattern: /^\/remediations$/, handler: () => enterpriseDemo.remediations() },
   { method: "POST", pattern: /^\/remediations$/, handler: (body) => enterpriseDemo.createRemediation((body as { findingId: string })?.findingId ?? "", (body as { reason?: string })?.reason) },

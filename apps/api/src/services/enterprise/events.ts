@@ -9,7 +9,7 @@ import { uniqueId } from "../../utils/helpers";
  */
 export async function logEnterpriseEvent(payload: {
   eventType: AuditEventType;
-  entityType: "asset" | "evidence" | "remediation" | "connector" | "finding";
+  entityType: "asset" | "evidence" | "remediation" | "connector" | "finding" | "governance";
   entityId: string;
   findingId?: string;
   auditId?: string;

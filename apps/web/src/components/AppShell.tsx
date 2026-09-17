@@ -124,6 +124,7 @@ const NAV: NavSection[] = [
     items: [
       { to: "/app/enterprise", label: "Portfolio", icon: LayoutGrid, end: true },
       { to: "/app/enterprise/topology", label: "Topology", icon: Map },
+      { to: "/app/enterprise/governance", label: "Governance", icon: Scale },
       { to: "/app/enterprise/connectors", label: "Connectors", icon: Cable },
       { to: "/app/enterprise/remediation", label: "Remediation", icon: Wrench },
       { to: "/app/enterprise/audit", label: "Audit Trail", icon: ScrollText },
@@ -171,7 +172,7 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
     const parts = pathname.split("/").filter(Boolean).filter((p) => p !== "app");
     const out: { key: string; label: string }[] = [{ key: "app", label: "Workspace" }];
     parts.forEach((p, i) => {
-      const label = labels[p] ?? (parts[i - 1] === "audits" && /^[a-z0-9-]+$/i.test(p) ? p.slice(0, 8) : p);
+      const label = parts[i - 1] === "enterprise" && p === "governance" ? "Enterprise Governance" : labels[p] ?? (parts[i - 1] === "audits" && /^[a-z0-9-]+$/i.test(p) ? p.slice(0, 8) : p);
       out.push({ key: p, label });
     });
     return out;

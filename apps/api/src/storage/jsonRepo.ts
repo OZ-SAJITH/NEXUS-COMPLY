@@ -14,6 +14,8 @@ import type {
   EvidenceRecord,
   AssetScanRecord,
   RemediationRecord,
+  GovernanceException,
+  OrganizationBaseline,
 } from "@nexus/shared-types";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,6 +34,8 @@ export interface DbShape {
   evidence: EvidenceRecord[];
   assetScans: AssetScanRecord[];
   remediations: RemediationRecord[];
+  governanceExceptions: GovernanceException[];
+  organizationBaseline: OrganizationBaseline[];
 }
 
 /**
@@ -65,9 +69,11 @@ export class JsonRepository {
         evidence: parsed.evidence ?? [],
         assetScans: parsed.assetScans ?? [],
         remediations: parsed.remediations ?? [],
+        governanceExceptions: (parsed as any).governanceExceptions ?? [],
+        organizationBaseline: (parsed as any).organizationBaseline ?? [],
       };
     } catch {
-      this.cache = { configurations: [], audits: [], approvedMappings: [], users: [], findingReviews: [], auditEvents: [], finalizations: [], assets: [], connectors: [], evidence: [], assetScans: [], remediations: [] };
+      this.cache = { configurations: [], audits: [], approvedMappings: [], users: [], findingReviews: [], auditEvents: [], finalizations: [], assets: [], connectors: [], evidence: [], assetScans: [], remediations: [], governanceExceptions: [], organizationBaseline: [] };
     }
     return this.cache;
   }
@@ -146,7 +152,7 @@ export class JsonRepository {
   }
 
   async reset(): Promise<void> {
-    this.cache = { configurations: [], audits: [], approvedMappings: [], users: [], findingReviews: [], auditEvents: [], finalizations: [], assets: [], connectors: [], evidence: [], assetScans: [], remediations: [] };
+    this.cache = { configurations: [], audits: [], approvedMappings: [], users: [], findingReviews: [], auditEvents: [], finalizations: [], assets: [], connectors: [], evidence: [], assetScans: [], remediations: [], governanceExceptions: [], organizationBaseline: [] };
     await this.save(this.cache);
   }
 
@@ -401,6 +407,53 @@ export class JsonRepository {
     else db.remediations.push(remediation);
     await this.save(db);
     return remediation;
+  }
+
+  // ---- Governance exceptions ----
+  async allGovernanceExceptions(): Promise<GovernanceException[]> {
+    const db = await this.load();
+    return db.governanceExceptions;
+  }
+
+  async exceptionsForAsset(assetId: string): Promise<GovernanceException[]> {
+    const db = await this.load();
+    return db.governanceExceptions.filter((e) => e.assetId === assetId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async exceptionsForControl(controlId: string): Promise<GovernanceException[]> {
+    const db = await this.load();
+    return db.governanceExceptions.filter((e) => e.controlId === controlId);
+  }
+
+  async getGovernanceException(id: string): Promise<GovernanceException | undefined> {
+    const db = await this.load();
+    return db.governanceExceptions.find((e) => e.id === id);
+  }
+
+  async saveGovernanceException(exception: GovernanceException): Promise<GovernanceException> {
+    const db = await this.load();
+    const idx = db.governanceExceptions.findIndex((e) => e.id === exception.id);
+    if (idx >= 0) db.governanceExceptions[idx] = exception;
+    else db.governanceExceptions.push(exception);
+    await this.save(db);
+    return exception;
+  }
+
+  // ---- Organization baseline ----
+  async getOrganizationBaseline(): Promise<OrganizationBaseline | undefined> {
+    const db = await this.load();
+    return db.organizationBaseline[0];
+  }
+
+  async saveOrganizationBaseline(baseline: OrganizationBaseline): Promise<OrganizationBaseline> {
+    const db = await this.load();
+    if (db.organizationBaseline.length > 0) {
+      db.organizationBaseline[0] = baseline;
+    } else {
+      db.organizationBaseline.push(baseline);
+    }
+    await this.save(db);
+    return baseline;
   }
 }
 

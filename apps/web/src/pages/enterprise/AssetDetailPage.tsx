@@ -1,7 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ScanSearch, BrainCircuit, AlignLeft, PlugZap, ChevronDown, ChevronRight, ShieldCheck, ShieldAlert } from "lucide-react";
-import type { AssetConnectorProfile, AssetFinding, AssetRecord, AssetScanRecord, EvidenceRecord, EvidenceWithVerification, FindingAnalysis, RemediationRecord } from "@nexus/shared-types";
+import { ArrowLeft, ScanSearch, BrainCircuit, AlignLeft, PlugZap, ChevronDown, ChevronRight, ShieldCheck, ShieldAlert, Scale } from "lucide-react";
+import type { ApplicableControlsResult, AssetConnectorProfile, AssetFinding, AssetRecord, AssetScanRecord, EvidenceRecord, EvidenceWithVerification, FindingAnalysis, GovernanceDecisionTrace, GovernanceException, PolicySelection, RemediationRecord } from "@nexus/shared-types";
 import { api } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { PageHeader } from "../../components/PageHeader";
@@ -10,6 +10,7 @@ import { SeverityBadge, StatusBadge, Card, SectionTitle } from "../../components
 import { RiskGauge } from "../../components/RiskGauge";
 import { RemediationStatusBadge } from "./EnterpriseTabs";
 import { cn, timeAgo, formatDate } from "../../utils/cn";
+import { currentUser } from "../../session";
 
 function LifecycleBadge({ lifecycle }: { lifecycle?: AssetFinding["lifecycle"] }) {
   const lc = lifecycle ?? "OPEN";
@@ -184,6 +185,225 @@ function ConnectorPanel({ profile, onTest, busy }: { profile?: AssetConnectorPro
   );
 }
 
+function ExceptionBadge({ status }: { status: GovernanceException["status"] }) {
+  const styles: Record<string, string> = {
+    REQUESTED: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+    APPROVED: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+    REJECTED: "border-red-500/40 bg-red-500/10 text-red-300",
+    EXPIRED: "border-slate-500/40 bg-slate-500/10 text-slate-400",
+  };
+  return <span className={cn("px-2 py-0.5 rounded-md border text-[10px] font-semibold uppercase tracking-wider", styles[status] ?? styles.REQUESTED)}>{status}</span>;
+}
+
+function GovernancePanel({ assetId, findingControls }: { assetId: string; findingControls: Array<{ controlId: string; controlName: string }> }) {
+  const [evalState, setEvalState] = useState<{ policy: PolicySelection; applicableControls: ApplicableControlsResult; trace: GovernanceDecisionTrace; exceptions: GovernanceException[] } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [controlId, setControlId] = useState(findingControls[0]?.controlId ?? "");
+  const [reason, setReason] = useState("");
+  const [days, setDays] = useState("30");
+  const [submitting, setSubmitting] = useState(false);
+  const [showAllControls, setShowAllControls] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setNotice("");
+    try {
+      setEvalState(await api.enterprise.evaluateGovernance(assetId));
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Could not load governance context.");
+    } finally {
+      setLoading(false);
+    }
+  }, [assetId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const requestEx = async () => {
+    setSubmitting(true);
+    setNotice("");
+    try {
+      await api.enterprise.requestGovernanceException({
+        controlId,
+        assetId,
+        reason: reason.trim() || "No reason provided.",
+        requestedBy: currentUser(),
+        expiresInDays: Number(days) || 30,
+      });
+      setReason("");
+      await load();
+      setNotice("Exception requested and logged to the enterprise audit trail.");
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Could not request exception");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const decide = async (exc: GovernanceException, decision: "APPROVED" | "REJECTED") => {
+    setSubmitting(true);
+    setNotice("");
+    try {
+      const decided = await api.enterprise.decideGovernanceException(exc.id, { exceptionId: exc.id, decision, decidedBy: currentUser() });
+      setNotice(
+        decided.status === "APPROVED"
+          ? `Exception approved — ${exc.controlId} renders FAIL + EXCEPTION APPROVED until ${new Date(decided.expiresAt).toLocaleDateString()}.`
+          : "Exception rejected — the control remains FAIL."
+      );
+      await load();
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Could not decide exception");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading && !evalState) {
+    return <div className="card !p-4 h-32 flex items-center justify-center"><span className="text-xs text-slate-500">Loading governance context…</span></div>;
+  }
+  if (!evalState) {
+    return (
+      <div className="card !p-4">
+        <div className="flex items-center gap-2">
+          <Scale className="w-4 h-4 text-accent" aria-hidden="true" />
+          <SectionTitle sub="Adaptive governance is available for managed estate">Adaptive governance</SectionTitle>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">{notice || "Governance context unavailable for this asset."}</p>
+      </div>
+    );
+  }
+
+  const { policy, applicableControls, exceptions } = evalState;
+  const assetExceptions = exceptions.filter((e) => e.assetId === assetId);
+  const controls = applicableControls.applicable;
+  const visibleControls = showAllControls ? controls : controls.slice(0, 6);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Scale className="w-4 h-4 text-accent" aria-hidden="true" />
+        <SectionTitle sub="Regional policy, applicable frameworks/controls and governed exceptions">Adaptive governance</SectionTitle>
+      </div>
+      {notice ? <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-accent">{notice}</div> : null}
+
+      <div className="card !p-4">
+        <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Policy selection</div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="font-semibold text-slate-100">{policy.policyProfileName}</span>
+          <span className="font-mono text-accent">{policy.policyProfileId}</span>
+          <span className="text-slate-500">{policy.regionLabel} · {policy.environment} · {policy.criticality}</span>
+        </div>
+        {policy.explanation.length > 0 ? (
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {policy.explanation.map((x) => (
+              <li key={x} className="px-1.5 py-0.5 rounded border border-surface-700 bg-surface-800/50 text-[10px] text-slate-400">{x}</li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {policy.frameworks.map((f) => (
+            <span key={f.id} title={`${f.name} ${f.version} — ${f.status}`} className="px-2 py-0.5 rounded-md border border-accent/30 bg-accent/5 text-[10px] font-mono text-accent">
+              {f.id}
+            </span>
+          ))}
+          <span className="text-[10px] text-slate-600">· {policy.organizationPolicy}</span>
+        </div>
+        <p className="mt-2 text-[10px] text-slate-600 leading-relaxed">{policy.disclaimer}</p>
+      </div>
+
+      <div className="card !p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Applicable controls</div>
+          <span className="text-[10px] text-slate-500">{controls.length} applicable · {applicableControls.total} evaluated</span>
+        </div>
+        <div className="grid md:grid-cols-2 gap-2">
+          {visibleControls.map((c) => (
+            <div key={c.controlId} className="rounded-lg border border-surface-700 bg-surface-800/40 p-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <SeverityBadge severity={c.severity} />
+                <span className="font-mono text-accent">{c.controlId}</span>
+                <span className="truncate text-slate-300">{c.controlName}</span>
+              </div>
+              <p className="mt-1 text-[11px] text-slate-500 leading-relaxed">{c.whyApplicable}</p>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {c.frameworkMembership.map((fr) => (
+                  <span key={fr} className="px-1.5 py-0.5 rounded border border-surface-700 text-[9px] font-mono text-slate-500">{fr}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        {controls.length > 6 ? (
+          <button onClick={() => setShowAllControls((v) => !v)} className="mt-2 text-[11px] text-accent hover:underline">
+            {showAllControls ? "Show fewer" : `Show all ${controls.length} controls`}
+          </button>
+        ) : null}
+      </div>
+
+      <div className="card !p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">Governance exceptions</div>
+          <span className="text-[10px] text-slate-500">{assetExceptions.length} on this asset</span>
+        </div>
+        {assetExceptions.length > 0 ? (
+          <ul className="space-y-2">
+            {assetExceptions.map((exc) => (
+              <li key={exc.id} className="rounded-lg border border-surface-700 bg-surface-800/40 p-2.5 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <ExceptionBadge status={exc.status} />
+                  <span className="font-mono text-accent">{exc.controlId}</span>
+                  <span className="text-slate-500">requested by {exc.requestedBy}</span>
+                  <span className="ml-auto text-[10px] text-slate-500">expires {new Date(exc.expiresAt).toLocaleDateString()}</span>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400 leading-relaxed">{exc.reason}</p>
+                {exc.status === "REQUESTED" ? (
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => decide(exc, "APPROVED")} disabled={submitting} className="btn !py-1 text-xs inline-flex items-center gap-1">Approve</button>
+                    <button onClick={() => decide(exc, "REJECTED")} disabled={submitting} className="btn !py-1 text-xs inline-flex items-center gap-1">Reject</button>
+                  </div>
+                ) : exc.status === "APPROVED" ? (
+                  <div className="mt-1 text-[10px] text-amber-300/90">Renders <span className="font-semibold">FAIL + EXCEPTION APPROVED</span> — never a silent PASS.</div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[11px] text-slate-500">No exceptions. Outstanding findings can be governed below.</p>
+        )}
+        <div className="mt-3 rounded-lg border border-surface-700 bg-surface-850 p-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">Request governance exception</div>
+          <div className="grid sm:grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-[10px] text-slate-500">Control</span>
+              <select value={controlId} onChange={(e) => setControlId(e.target.value)} className="input !py-1.5 text-xs mt-0.5" disabled={findingControls.length === 0}>
+                {findingControls.map((f) => (
+                  <option key={f.controlId} value={f.controlId}>{f.controlId} — {f.controlName}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] text-slate-500">Expires in (days)</span>
+              <input type="number" min={1} max={365} value={days} onChange={(e) => setDays(e.target.value)} className="input !py-1.5 text-xs mt-0.5" />
+            </label>
+          </div>
+          <label className="block">
+            <span className="text-[10px] text-slate-500">Reason</span>
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="Business justification for the exception…" className="input text-xs mt-0.5" />
+          </label>
+          <div className="flex items-center justify-end gap-2">
+            <span className="text-[10px] text-slate-600">simulated governance — every decision is audited</span>
+            <button onClick={requestEx} disabled={submitting || !controlId} className="btn-primary !py-1.5 text-xs">
+              {submitting ? "Requesting…" : "Request exception"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AssetDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -343,6 +563,10 @@ export default function AssetDetailPage() {
 
       <section>
         <ConnectorPanel profile={connectorProfile ?? undefined} onTest={testConnection} busy={busy} />
+      </section>
+
+      <section>
+        <GovernancePanel assetId={id} findingControls={findings.map((f) => ({ controlId: f.controlId, controlName: f.controlName }))} />
       </section>
 
       {risk ? (

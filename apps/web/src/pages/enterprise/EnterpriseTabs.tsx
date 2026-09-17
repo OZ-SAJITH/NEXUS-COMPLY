@@ -5,6 +5,7 @@ import { cn } from "../../utils/cn";
 export const ENTERPRISE_TABS = [
   { key: "assets", label: "Portfolio", to: "/app/enterprise" },
   { key: "topology", label: "Topology", to: "/app/enterprise/topology" },
+  { key: "governance", label: "Governance", to: "/app/enterprise/governance" },
   { key: "connectors", label: "Connectors", to: "/app/enterprise/connectors" },
   { key: "remediation", label: "Remediation", to: "/app/enterprise/remediation" },
   { key: "audit", label: "Audit Trail", to: "/app/enterprise/audit" },

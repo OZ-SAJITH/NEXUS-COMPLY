@@ -157,6 +157,8 @@ export default function DashboardPage() {
     )
     .sort((a, b) => b.finding.risk - a.finding.risk);
   const topRisks = stats.topRisks;
+  const posturalRegions = entSummary ? (entSummary.byRegion ?? []) : [];
+  const posturalFrameworks = entSummary ? (entSummary.byFramework ?? []) : [];
   const coreState: NexusCoreState =
     stats.review.pending > 0 ? "REVIEW_REQUIRED" : stats.risk.CRITICAL > 0 ? "CRITICAL" : stats.review.humanVerifiedCoverage >= 90 ? "VERIFIED" : "IDLE";
 
@@ -395,6 +397,72 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : null}
+          </div>
+        </Reveal>
+      ) : null}
+
+      {/* Regional + framework posture (PHASE 4) */}
+      {posturalRegions.length ? (
+        <Reveal delay={110}>
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-slate-100">Regional & framework posture</h2>
+              <Link to="/app/enterprise/governance" className="text-xs text-accent hover:underline">Open enterprise governance →</Link>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="card !p-4">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">By region</div>
+                <div className="space-y-3">
+                  {posturalRegions.map((r) => {
+                    const total = r.passed + r.failed + r.warnings;
+                    const ratio = total ? (r.passed / total) * 100 : 0;
+                    return (
+                      <div key={r.region}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-slate-300">{r.regionLabel} <span className="text-slate-600">· {r.assetCount} assets</span></span>
+                          <span className="font-mono text-slate-300">{r.score}% <span className="text-slate-600">({r.passed} passed · {r.failed} failed)</span></span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-surface-800 overflow-hidden">
+                          <div className="h-full rounded-full bg-emerald-400/80 transition-all duration-700" style={{ width: `${Math.max(0, Math.min(100, ratio))}%` }} />
+                        </div>
+                        {r.findings > 0 ? <div className="text-[10px] text-amber-300/90 mt-0.5">{r.findings} open findings</div> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="card !p-4">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">By framework</div>
+                <div className="space-y-3">
+                  {posturalFrameworks.map((f) => (
+                    <div key={f.framework}>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-slate-300">{f.label}</span>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="font-mono text-slate-400">{f.score}% · {f.passed}/{f.totalControls}</span>
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded border text-[10px] font-semibold uppercase tracking-wider",
+                            f.status === "COMPLIANT"
+                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                              : f.status === "PARTIAL"
+                                ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                                : f.status === "AT_RISK"
+                                  ? "border-red-500/40 bg-red-500/10 text-red-300"
+                                  : "border-slate-500/40 bg-slate-500/10 text-slate-400"
+                          )}>{f.status.replace("_", " ")}</span>
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-surface-800 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${Math.max(0, Math.min(100, f.score))}%`, backgroundColor: f.status === "AT_RISK" ? "#ef4444" : f.status === "PARTIAL" ? "#f59e0b" : f.status === "COMPLIANT" ? "#34d399" : "#64748b" }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </Reveal>
       ) : null}

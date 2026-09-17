@@ -18,12 +18,15 @@ import {
   assetRelationships,
   buildImpactGraph,
   collectRawEvidence,
+  computeFrameworkPosture,
+  computeRegionalPosture,
   evaluateAssetControl,
   evaluateEvidenceForAsset,
   explainableRisk,
   findingsFromResults,
   getAssetControlById,
   getAssetControls,
+  governanceContextForFinding,
   knownEstateRecords,
   matureEstate,
   modelConnectorLatency,
@@ -169,6 +172,11 @@ export async function scanAsset(ctx: Instantiation, assetId: string, opts: { tri
   const ruleFindings = findingsFromResults(asset, ruleResults);
 
   const findings: AssetFinding[] = ruleFindings.map((f) => buildFindingFromRule(asset, f));
+
+  const governanceExceptions = await ctx.repo.allGovernanceExceptions();
+  for (const f of findings) {
+    f.governanceContext = governanceContextForFinding(asset, f.controlId, governanceExceptions);
+  }
 
   const counts = {
     passed: ruleResults.filter((r) => r.evaluation.status === "PASS").length,
@@ -459,6 +467,8 @@ export async function complianceSummary(ctx: Instantiation): Promise<ComplianceS
   const byCategory = new Map<string, { passed: number; failed: number; warnings: number }>();
   const bySeverity = new Map<Severity, number>();
   const lifecycleBreakdown = new Map<FindingLifecycle, number>();
+  const controlResults = new Map<string, Array<{ controlId: string; status: EvalOutcome["status"] }>>();
+  const latestFindings = new Map<string, AssetFinding[]>();
   let passed = 0;
   let failed = 0;
   let warnings = 0;
@@ -472,6 +482,9 @@ export async function complianceSummary(ctx: Instantiation): Promise<ComplianceS
     const findings = findingsFromResults(asset, results);
     const byControl = new Set(findings.map((f) => f.controlId));
     for (const r of results) {
+      const assetResults = controlResults.get(asset.id) ?? [];
+      assetResults.push({ controlId: r.ruleId, status: r.evaluation.status });
+      controlResults.set(asset.id, assetResults);
       if (r.evaluation.status === "PASS") {
         passed += 1;
         const e = byCategory.get(r.category) ?? { passed: 0, failed: 0, warnings: 0 };
@@ -490,6 +503,7 @@ export async function complianceSummary(ctx: Instantiation): Promise<ComplianceS
     const scans = await ctx.repo.scansForAsset(asset.id);
     const latest = scans[0];
     if (latest) {
+      latestFindings.set(asset.id, latest.findings);
       for (const f of latest.findings) {
         const l = f.lifecycle ?? "OPEN";
         lifecycleBreakdown.set(l, (lifecycleBreakdown.get(l) ?? 0) + 1);
@@ -509,6 +523,8 @@ export async function complianceSummary(ctx: Instantiation): Promise<ComplianceS
     byCategory: [...byCategory.entries()].map(([category, counts]) => ({ category, ...counts })),
     bySeverity: [...bySeverity.entries()].map(([severity, count]) => ({ severity, count })),
     lifecycleBreakdown: [...lifecycleBreakdown.entries()].map(([lifecycle, count]) => ({ lifecycle, count })),
+    byRegion: computeRegionalPosture(assets, controlResults),
+    byFramework: computeFrameworkPosture(assets, (assetId) => latestFindings.get(assetId) ?? []),
     generatedAt: new Date().toISOString(),
   };
 }

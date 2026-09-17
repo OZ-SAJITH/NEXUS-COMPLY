@@ -5,12 +5,30 @@ import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { enterpriseDemo } from "../src/demo/enterpriseStore";
 import AssetDetailPage from "../src/pages/enterprise/AssetDetailPage";
 import ConnectorsPage from "../src/pages/enterprise/ConnectorsPage";
+import GovernancePage from "../src/pages/enterprise/GovernancePage";
+import DashboardPage from "../src/pages/DashboardPage";
+import EnterpriseAuditPage from "../src/pages/enterprise/EnterpriseAuditPage";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) =>
     ({ matches: false, media: query, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false }) as unknown as MediaQueryList;
+}
+
+if (typeof window !== "undefined" && !window.IntersectionObserver) {
+  class IOStub {
+    root = null;
+    rootMargin = "";
+    thresholds = [];
+    disconnect() {}
+    observe() {}
+    unobserve() {}
+    takeRecords() {
+      return [];
+    }
+  }
+  window.IntersectionObserver = IOStub as unknown as typeof IntersectionObserver;
 }
 
 /**
@@ -126,7 +144,7 @@ describe("AssetDetailPage — PHASE 2 connector + evidence integrity (jsdom rend
     expect(text).toContain("Expected");
     expect(text).toContain("Recommended fix");
 
-    const select = container.querySelector("select") as HTMLSelectElement;
+    const select = [...container.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.value === "OPEN")) as HTMLSelectElement;
     expect(select).toBeDefined();
     expect(select.value).toBe("OPEN");
     await act(async () => {
@@ -188,5 +206,127 @@ describe("ConnectorsPage — PHASE 2 transport/protocol/capabilities chips (jsdo
     expect(text).toMatch(/Palo Alto Firewall Adapter connection test: ONLINE/);
     expect(enterpriseDemo.connectorById("conn-net-02")?.status).toBe("ONLINE");
     act(() => root.unmount());
+  });
+});
+
+describe("GovernancePage — PHASE 4 adaptive governance hub (jsdom render probe)", () => {
+  function mountGovernance() {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/app/enterprise/governance"]}>
+          <Routes>
+            <Route path="/app/enterprise/governance" element={<GovernancePage />} />
+          </Routes>
+        </MemoryRouter>
+      );
+    });
+    return { root, container };
+  }
+
+  it("renders regime posture, framework catalog, policy profiles, decision trace and exception registry", async () => {
+    const { root, container } = mountGovernance();
+    await flush();
+    const text = container.textContent ?? "";
+    expect(text).toContain("Enterprise Governance");
+    expect(text).toContain("Regime posture");
+    expect(text).toContain("By region");
+    expect(text).toContain("By framework");
+    expect(text).toContain("Framework catalog");
+    expect(text).toContain("Regional policy profiles");
+    expect(text).toContain("Asset decision trace");
+    expect(text).toContain("Governance exception registry");
+    expect(text).toContain("NIST");
+    expect(text).toContain("ISO27001");
+    expect(text).toContain("PCI_DSS");
+    expect(text).toContain("OWASP");
+    expect(text).toContain("INDIA_ENTERPRISE");
+    expect(text).toContain("Regional policy");
+    expect(text).toContain("Applicable controls");
+    const selects = [...container.querySelectorAll("select")];
+    expect(selects.length).toBeGreaterThan(0);
+    expect(selects[0].value).not.toBe("");
+    act(() => root.unmount());
+  });
+});
+
+describe("AssetDetailPage — PHASE 4 Adaptive Governance panel (jsdom render probe)", () => {
+  beforeAll(async () => {
+    await enterpriseDemo.scan(HERO, "manual");
+  });
+
+  it("renders policy selection, applicable controls grid and exception governance actions", async () => {
+    const { root, container } = mount();
+    await flush();
+    const text = container.textContent ?? "";
+    expect(text).toContain("Adaptive governance");
+    expect(text).toContain("Policy selection");
+    expect(text).toContain("INDIA_ENTERPRISE");
+    expect(text).toContain("Applicable controls");
+    expect(text).toContain("14 applicable");
+    expect(text).toContain("Governance exceptions");
+    expect(text).toContain("Request governance exception");
+    expect([...container.querySelectorAll("button")].some((b) => b.textContent?.includes("Request exception"))).toBe(true);
+    act(() => root.unmount());
+  });
+});
+
+describe("DashboardPage — PHASE 4 regional & framework posture panel (jsdom render probe)", () => {
+  it("renders the posture panel with byRegion/byFramework rows and the governance deep link", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/app"]}>
+          <Routes>
+            <Route path="/app" element={<DashboardPage />} />
+          </Routes>
+        </MemoryRouter>
+      );
+    });
+    await flush();
+    const text = container.textContent ?? "";
+    act(() => root.unmount());
+    expect(text).toContain("Regional & framework posture");
+    expect(text).toContain("By region");
+    expect(text).toContain("By framework");
+    expect(text).toContain("India");
+    expect(text).toContain("Singapore");
+    expect(text).toContain("United States");
+    expect(text).toContain("AT RISK");
+    expect(text).toContain("Open enterprise governance");
+  });
+});
+
+describe("EnterpriseAuditPage — PHASE 4 governance events audited (jsdom render probe)", () => {
+  it("renders governance exception events with dedicated chips in the ledger", async () => {
+    const created = enterpriseDemo.requestException({
+      controlId: "TLS-001",
+      assetId: HERO,
+      reason: "Legacy TLS for backward compatibility",
+      requestedBy: "Demo Operator",
+      expiresInDays: 30,
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/app/enterprise/audit"]}>
+          <Routes>
+            <Route path="/app/enterprise/audit" element={<EnterpriseAuditPage />} />
+          </Routes>
+        </MemoryRouter>
+      );
+    });
+    await flush();
+    const text = container.textContent ?? "";
+    act(() => root.unmount());
+    expect(text).toContain("Enterprise Audit Trail");
+    expect(text).toContain("GOVERNANCE EXCEPTION REQUESTED");
+    expect(text).toContain(`governance:${created.id}`);
   });
 });

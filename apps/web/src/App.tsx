@@ -29,6 +29,7 @@ import ComplianceDriftPage from "./pages/gov/ComplianceDriftPage";
 import EnterpriseAssetsPage from "./pages/enterprise/AssetsPage";
 import EnterpriseAssetDetailPage from "./pages/enterprise/AssetDetailPage";
 import EnterpriseTopologyPage from "./pages/enterprise/TopologyPage";
+import EnterpriseGovernancePage from "./pages/enterprise/GovernancePage";
 import EnterpriseConnectorsPage from "./pages/enterprise/ConnectorsPage";
 import EnterpriseRemediationsPage from "./pages/enterprise/RemediationsPage";
 import EnterpriseAuditPage from "./pages/enterprise/EnterpriseAuditPage";
@@ -91,6 +92,7 @@ export default function App() {
           <Route path="enterprise/assets" element={<EnterpriseAssetsPage />} />
           <Route path="enterprise/assets/:id" element={<EnterpriseAssetDetailPage />} />
           <Route path="enterprise/topology" element={<EnterpriseTopologyPage />} />
+          <Route path="enterprise/governance" element={<EnterpriseGovernancePage />} />
           <Route path="enterprise/connectors" element={<EnterpriseConnectorsPage />} />
           <Route path="enterprise/remediation" element={<EnterpriseRemediationsPage />} />
           <Route path="enterprise/audit" element={<EnterpriseAuditPage />} />

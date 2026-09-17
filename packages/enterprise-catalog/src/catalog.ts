@@ -255,6 +255,13 @@ export const INVENTORY: SimulatedAssetSeed[] = [
     observedState: { dbEncryption: true, dbBindAddress: "10.32.30.10", dbPort: 5432, authStrength: "strong", plaintextSecrets: false, sslEnabled: true, serviceVersion: "15.3", latestStableVersion: "15.7" },
     tags: ["pii"],
   },
+  {
+    id: "ast-api-ny-01", name: "API-NY-01", assetType: "API", vendor: "Kong", technology: "Kong Gateway 3.4",
+    environment: "PROD_SIM", region: "USA", site: "site-newyork", networkZone: "APP", tier: "TIER_1",
+    hostname: "api-ny-01.newyork.nexuscorp.net", ipAddress: "10.32.20.25", criticality: "HIGH",
+    observedState: { tlsMinVersion: "1.2", cipherStrength: "strong", insecureProtocols: [], legacyProtocols: [], certDaysToExpiry: 190, apiAuthEnabled: true, apiRateLimit: true, xmlSignatureValidation: false, plaintextSecrets: false, configChecksum: "5566aa77", serviceVersion: "3.4.0" },
+    tags: ["internet-facing"],
+  },
   // Singapore — representative API gateway
   {
     id: "ast-api-sg-01", name: "API-SG-01", assetType: "API", vendor: "Kong", technology: "Kong Gateway 3.4",
@@ -301,7 +308,7 @@ export const INVENTORY: SimulatedAssetSeed[] = [
 export const DISCOVERY_WAVE_IDS: ReadonlySet<string> = new Set([
   "ast-fw-chn-01", "ast-rtr-chn-01", "ast-sw-chn-01",
   "ast-app-chn-01", "ast-api-chn-01", "ast-db-chn-01", "ast-mq-chn-01",
-  "ast-fw-ny-01", "ast-app-ny-01", "ast-db-ny-01",
+  "ast-fw-ny-01", "ast-app-ny-01", "ast-db-ny-01", "ast-api-ny-01",
   "ast-fw-sg-01", "ast-api-sg-01", "ast-db-sg-01", "ast-cert-sg-01",
 ]);
 
@@ -352,7 +359,9 @@ const RELATIONSHIPS: RelationshipSeed[] = [
   { from: "ast-api-chn-01", to: "ast-db-chn-01", relation: "dependsOn", source: "10.20.10.25", destination: "10.20.30.20", protocol: "PostgreSQL", port: 5432, networkZone: "APP→DATA", status: "MONITORED", encrypted: true },
   { from: "ast-api-chn-01", to: "ast-mq-chn-01", relation: "dependsOn", source: "10.20.10.25", destination: "10.21.5.20", protocol: "AMQP", port: 5671, networkZone: "APP→CORE", status: "ALLOWED", encrypted: true },
   { from: "ast-fw-ny-01", to: "ast-app-ny-01", relation: "fronts", source: "0.0.0.0/0", destination: "10.32.20.10", protocol: "HTTPS", port: 443, networkZone: "DMZ→APP", status: "ALLOWED", encrypted: true },
+  { from: "ast-fw-ny-01", to: "ast-api-ny-01", relation: "fronts", source: "0.0.0.0/0", destination: "10.32.20.25", protocol: "HTTPS", port: 443, networkZone: "DMZ→APP", status: "ALLOWED", encrypted: true },
   { from: "ast-app-ny-01", to: "ast-db-ny-01", relation: "dependsOn", source: "10.32.20.10", destination: "10.32.30.10", protocol: "PostgreSQL", port: 5432, networkZone: "APP→DATA", status: "ALLOWED", encrypted: true },
+  { from: "ast-api-ny-01", to: "ast-db-ny-01", relation: "dependsOn", source: "10.32.20.25", destination: "10.32.30.10", protocol: "PostgreSQL", port: 5432, networkZone: "APP→DATA", status: "MONITORED", encrypted: true },
   { from: "ast-api-sg-01", to: "ast-db-analytics", relation: "dependsOn", source: "10.40.20.25", destination: "10.40.30.7", protocol: "MongoDB Wire", port: 27017, networkZone: "APP→DATA", status: "MONITORED", encrypted: true },
   { from: "ast-sw-chn-01", to: "ast-rtr-chn-01", relation: "connectsTo", source: "10.10.0.20", destination: "10.10.0.10", protocol: "TCP", port: 22, networkZone: "CORE", status: "ALLOWED", encrypted: false },
   { from: "ast-app-chn-01", to: "ast-db-chn-01", relation: "dependsOn", source: "10.20.10.20", destination: "10.20.30.20", protocol: "PostgreSQL", port: 5432, networkZone: "APP→DATA", status: "ALLOWED", encrypted: true },

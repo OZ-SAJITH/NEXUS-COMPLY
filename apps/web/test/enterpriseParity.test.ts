@@ -21,20 +21,20 @@ describe("enterpriseDemo — backend parity", () => {
     expect(assets.every((a) => a.discoveryStatus === "SCANNABLE")).toBe(true);
   });
 
-  it("discoveries actually discover the 14-asset regional wave, then re-runs are idempotent", () => {
+  it("discoveries actually discover the 15-asset regional wave, then re-runs are idempotent", () => {
     const before = enterpriseDemo.listAssets();
     const seededCount = before.length;
     expect(seededCount).toBe(22);
     const r = enterpriseDemo.discover();
     expect(r.runId).toMatch(/^disc-/);
-    expect(r.discovered).toBe(14);
+    expect(r.discovered).toBe(15);
     expect(r.updated).toBe(0);
-    expect(r.assets.length).toBe(seededCount + 14);
+    expect(r.assets.length).toBe(seededCount + 15);
 
     const after = enterpriseDemo.listAssets();
-    expect(after.length).toBe(seededCount + 14);
+    expect(after.length).toBe(seededCount + 15);
     const names = new Set(after.map((a) => a.name));
-    for (const n of ["FW-CHN-01", "RTR-CHN-01", "SW-CHN-01", "APP-CHN-01", "API-CHN-01", "DB-CHN-01", "MQ-CHN-01", "FW-NY-01", "APP-NY-01", "DB-NY-01", "FW-SG-01", "API-SG-01", "DB-SG-01", "CERT-SG-01"]) {
+    for (const n of ["FW-CHN-01", "RTR-CHN-01", "SW-CHN-01", "APP-CHN-01", "API-CHN-01", "DB-CHN-01", "MQ-CHN-01", "FW-NY-01", "APP-NY-01", "API-NY-01", "DB-NY-01", "FW-SG-01", "API-SG-01", "DB-SG-01", "CERT-SG-01"]) {
       expect(names.has(n), `expected kind asset ${n} in discovered wave`).toBe(true);
     }
     const regions = new Set(after.map((a) => a.regionLabel));
@@ -223,5 +223,91 @@ describe("demoApi dispatch — mirrors the enterprise REST surface", () => {
       body: JSON.stringify({ lifecycle: "OPEN" }),
     });
     expect(reopened.lifecycle).toBe("OPEN");
+  });
+});
+
+describe("PHASE 4 — governance demo mirror (backend parity)", () => {
+  const hero = "ast-api-gateway-01";
+
+  function demo<T>(path: string, init?: RequestInit): T {
+    return dispatchDemo<T>(path, init).body;
+  }
+
+  it("serves the framework catalog and raises 404 for unknown frameworks", () => {
+    const frameworks = demo<Array<{ id: string; name: string; scope: string; applicability: string; disclaimer: string }>>("/api/frameworks");
+    expect(frameworks.length).toBeGreaterThanOrEqual(5);
+    expect(frameworks.map((f) => f.id)).toContain("NIST");
+    const nist = demo<{ id: string; name: string }>("/api/frameworks/NIST");
+    expect(nist.id).toBe("NIST");
+    expect(() => dispatchDemo("/api/frameworks/NONEXISTENT")).toThrowError(/framework not found/i);
+  });
+
+  it("serves policy profiles and selects a deterministic region policy", () => {
+    const policies = demo<Array<{ profileId: string; region: string }>>("/api/policies");
+    expect(policies.map((p) => p.profileId)).toContain("INDIA_ENTERPRISE");
+    const ipe = demo<{ profileId: string; region: string }>("/api/policies/INDIA_ENTERPRISE");
+    expect(ipe.region).toBe("IND");
+
+    const sel = demo<{ region: string; policyProfileId: string; regionLabel: string }>("/api/governance/policy/select", {
+      method: "POST",
+      body: JSON.stringify({ assetId: hero }),
+    });
+    expect(sel.region).toBe("IND");
+    expect(sel.policyProfileId).toBe("INDIA_ENTERPRISE");
+    expect(sel.regionLabel).toBe("India");
+  });
+
+  it("serves asset governance trace, per-framework view and applicable controls", () => {
+    const trace = demo<{ assetId: string; region: string; frameworks: unknown[]; applicableControls: unknown[]; exceptions: unknown[] }>("/api/assets/" + hero + "/governance");
+    expect(trace.assetId).toBe(hero);
+    expect(trace.frameworks.length).toBeGreaterThanOrEqual(1);
+    expect(trace.applicableControls.length).toBeGreaterThanOrEqual(1);
+
+    const fw = demo<{ frameworks: unknown[] }>("/api/assets/" + hero + "/frameworks");
+    expect(fw.frameworks.length).toBeGreaterThanOrEqual(1);
+
+    const controls = demo<{ applicable: unknown[]; total: number }>("/api/assets/" + hero + "/applicable-controls");
+    expect(controls.total).toBeGreaterThanOrEqual(21);
+    expect(controls.applicable.length).toBeGreaterThanOrEqual(1);
+
+    const gov = demo<{ policy: { policyProfileId: string }; trace: { assetId: string } }>("/api/governance/evaluate/" + hero);
+    expect(gov.policy.policyProfileId).toBe("INDIA_ENTERPRISE");
+    expect(gov.trace.assetId).toBe(hero);
+  });
+
+  it("full exception lifecycle through the REST surface: request → approve → verify → list", () => {
+    const request = { controlId: "TLS-001", assetId: hero, reason: "Legacy TLS for backward compatibility", requestedBy: "Demo Operator", expiresInDays: 30 };
+    const created = demo<{ id: string; status: string; controlId: string; assetId: string }>("/api/enterprise/governance/exceptions", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    expect(created.status).toBe("REQUESTED");
+    expect(created.controlId).toBe("TLS-001");
+    expect(created.assetId).toBe(hero);
+
+    const approved = demo<{ id: string; status: string; approvedBy: string }>("/api/enterprise/governance/exceptions/" + created.id + "/decide", {
+      method: "POST",
+      body: JSON.stringify({ decision: "APPROVED", decidedBy: "Security Lead", reason: "Approved" }),
+    });
+    expect(approved.status).toBe("APPROVED");
+    expect(approved.approvedBy).toBe("Security Lead");
+
+    const all = demo<Array<{ id: string; status: string }>>("/api/enterprise/governance/exceptions");
+    expect(all.some((e) => e.id === created.id)).toBe(true);
+    expect(all.find((e) => e.id === created.id)!.status).toBe("APPROVED");
+
+    const events = demo<Array<{ eventType: string; entityType: string; entityId: string }>>("/api/audit");
+    const governanceEvents = events.filter((e) => e.entityType === "governance" && (e.eventType === "GOVERNANCE_EXCEPTION_REQUESTED" || e.eventType === "GOVERNANCE_EXCEPTION_DECIDED") && e.entityId === created.id);
+    expect(governanceEvents).toHaveLength(2);
+  });
+
+  it("compliance summary includes byRegion + byFramework with PASS controls counted", () => {
+    const s = demo<{ byRegion: Array<{ region: string; assetCount: number; passed: number; score: number }>; byFramework: Array<{ framework: string; score: number; status: string }> }>("/api/enterprise/compliance-summary");
+    expect(s.byRegion.length).toBeGreaterThanOrEqual(1);
+    expect(s.byRegion.some((r) => r.assetCount >= 1)).toBe(true);
+    // PASS controls are accumulated into byRegion scores (the PHASE 4 fix)
+    expect(s.byRegion.some((r) => r.passed > 0)).toBe(true);
+    expect(s.byFramework.length).toBeGreaterThanOrEqual(1);
+    for (const f of s.byFramework) expect(f.score).toBeGreaterThanOrEqual(0);
   });
 });

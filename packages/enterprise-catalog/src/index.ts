@@ -9,3 +9,4 @@ export * from "./discovery";
 export * from "./impact";
 export * from "./integrity";
 export * from "./evidence";
+export * from "./governance";

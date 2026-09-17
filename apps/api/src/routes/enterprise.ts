@@ -20,6 +20,18 @@ import {
   ENTERPRISE_TIERS,
   enterpriseTopologyConnections,
 } from "../services/enterprise/assetService";
+import {
+  decideException,
+  getAssetApplicableControls,
+  getAssetGovernance,
+  getFrameworkById,
+  getPolicyById,
+  listExceptions,
+  listFrameworks,
+  listPolicies,
+  requestException,
+  selectPolicy,
+} from "../services/enterprise/governanceService";
 import { analyzeFinding } from "../services/enterprise/aiAnalysisService";
 import {
   approveRemediation,
@@ -33,6 +45,7 @@ import {
 } from "../services/enterprise/remediationService";
 import { SYSTEM_REVIEWER } from "../services/auth";
 import { ApiError } from "../services/reviewService";
+import { controlFrameworkMappings } from "@nexus/enterprise-catalog";
 
 export const enterpriseRouter = Router();
 
@@ -226,10 +239,132 @@ enterpriseRouter.get("/asset-controls", async (_req, res) => {
   res.json(catalogue.controls);
 });
 
+// ---------------------------------------------------------------------------
+// PHASE 4 — Global Adaptive Governance + Multi-Framework Compliance
+// ---------------------------------------------------------------------------
+
 enterpriseRouter.get("/frameworks", async (_req, res) => {
+  const frameworks = await listFrameworks();
+  res.json(frameworks);
+});
+
+enterpriseRouter.get("/frameworks/:id", async (req, res) => {
+  const framework = await getFrameworkById(req.params.id);
+  res.json(framework);
+});
+
+enterpriseRouter.get("/policies", async (_req, res) => {
+  const policies = await listPolicies();
+  res.json(policies);
+});
+
+enterpriseRouter.get("/policies/:id", async (req, res) => {
+  const policy = await getPolicyById(req.params.id);
+  res.json(policy);
+});
+
+enterpriseRouter.post("/governance/policy/select", async (req, res) => {
+  const parsed = z.object({ assetId: z.string().min(1) }).safeParse(req.body ?? {});
+  if (!parsed.success) return handleError(res, "Invalid policy selection request: " + parsed.error.message);
   const repo = getRepository();
-  const catalogue = await assetControlCatalogue({ repo, manager: new ConnectorManager(repo) });
-  res.json(catalogue.frameworks);
+  const selection = await selectPolicy({ repo, manager: new ConnectorManager(repo) }, parsed.data.assetId);
+  res.json(selection);
+});
+
+enterpriseRouter.get("/governance/evaluate/:assetId", async (req, res) => {
+  const repo = getRepository();
+  const manager = new ConnectorManager(repo);
+  const asset = await repo.getAsset(req.params.assetId);
+  if (!asset) return handleError(res, "Asset not found", 404);
+  const [policy, applicableControls, trace, exceptions] = await Promise.all([
+    selectPolicy({ repo, manager }, req.params.assetId),
+    getAssetApplicableControls({ repo, manager }, req.params.assetId),
+    getAssetGovernance({ repo, manager }, req.params.assetId),
+    listExceptions({ repo, manager }, req.params.assetId),
+  ]);
+  res.json({ assetId: req.params.assetId, policy, applicableControls, trace, exceptions });
+});
+
+enterpriseRouter.get("/assets/:id/governance", async (req, res) => {
+  const repo = getRepository();
+  const trace = await getAssetGovernance({ repo, manager: new ConnectorManager(repo) }, req.params.id);
+  res.json(trace);
+});
+
+enterpriseRouter.get("/assets/:id/frameworks", async (req, res) => {
+  const repo = getRepository();
+  const asset = await repo.getAsset(req.params.id);
+  if (!asset) return handleError(res, "Asset not found", 404);
+  const governance = await getAssetGovernance({ repo, manager: new ConnectorManager(repo) }, req.params.id);
+  res.json({
+    assetId: asset.id,
+    region: governance.region,
+    regionLabel: governance.regionLabel,
+    frameworks: governance.frameworks.map((f) => ({
+      id: f.id,
+      name: f.name,
+      version: f.version,
+      status: f.status,
+      disclaimer: f.disclaimer,
+      mappings: governance.applicableControls
+        .filter((c) => {
+          const mappings = controlFrameworkMappings(c.controlId);
+          return mappings.some((m) => m.framework === f.id);
+        })
+        .map((c) => {
+          const mappings = controlFrameworkMappings(c.controlId);
+          const mapping = mappings.find((m) => m.framework === f.id);
+          return { controlId: c.controlId, controlName: c.controlName, ...mapping };
+        }),
+    })),
+    generatedAt: new Date().toISOString(),
+  });
+});
+
+enterpriseRouter.get("/assets/:id/applicable-controls", async (req, res) => {
+  const repo = getRepository();
+  const controls = await getAssetApplicableControls({ repo, manager: new ConnectorManager(repo) }, req.params.id);
+  res.json(controls);
+});
+
+// ---- Governance exceptions ----
+
+enterpriseRouter.get("/enterprise/governance/exceptions", async (_req, res) => {
+  const repo = getRepository();
+  const exceptions = await listExceptions({ repo, manager: new ConnectorManager(repo) });
+  res.json(exceptions);
+});
+
+const exceptionRequestSchema = z.object({
+  controlId: z.string().min(1),
+  assetId: z.string().min(1),
+  reason: z.string().min(1).max(2000),
+  requestedBy: z.string().min(1),
+  expiresInDays: z.number().int().positive().optional(),
+});
+
+enterpriseRouter.post("/enterprise/governance/exceptions", async (req, res) => {
+  const parsed = exceptionRequestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return handleError(res, "Invalid exception request: " + parsed.error.message);
+  const repo = getRepository();
+  const exception = await requestException({ repo, manager: new ConnectorManager(repo) }, parsed.data);
+  res.status(201).json(exception);
+});
+
+const exceptionDecisionSchema = z.object({
+  exceptionId: z.string().min(1),
+  decision: z.enum(["APPROVED", "REJECTED"]),
+  decidedBy: z.string().min(1),
+  reason: z.string().optional(),
+  expiresInDays: z.number().int().positive().optional(),
+});
+
+enterpriseRouter.post("/enterprise/governance/exceptions/:id/decide", async (req, res) => {
+  const parsed = exceptionDecisionSchema.safeParse({ ...(req.body ?? {}), exceptionId: req.params.id });
+  if (!parsed.success) return handleError(res, "Invalid exception decision: " + parsed.error.message);
+  const repo = getRepository();
+  const exception = await decideException({ repo, manager: new ConnectorManager(repo) }, parsed.data);
+  res.json(exception);
 });
 
 // ---------------------------------------------------------------------------
@@ -341,7 +476,7 @@ enterpriseRouter.get("/audit", async (_req, res) => {
   const repo = getRepository();
   const all = await repo.allAuditEvents();
   const enterprise = all
-    .filter((e) => ["asset", "evidence", "remediation", "connector"].includes(e.entityType))
+    .filter((e) => ["asset", "evidence", "remediation", "connector", "governance"].includes(e.entityType))
     .sort((a, b) => b.at.localeCompare(a.at));
   res.json(enterprise);
 });

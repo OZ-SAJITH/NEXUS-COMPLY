@@ -35,7 +35,17 @@ The landing dashboard shows **real aggregates**:
 
 ## 5. Reports & the models (30s)
 - On any audit, open **Report** tab → self-contained printable HTML with branding → judge's browser **Print → Save as PDF**.
-- Mention file evidence + explainable risk formula and the 35 vitest tests (`npm test`).
+- Mention file evidence + explainable risk formula and the 137 tests (`npm test`: API 105 + Web 32).
+
+## 6. Global Adaptive Governance — PHASE 4 (60s)
+- Sidebar → **Enterprise** → **Governance** (portrait: Global policy, Adaptive).
+- **Regime posture**: by-region rows (India / Singapore / United States — scores come from the same compliance engine; PASS controls counted) and by-framework rows with COMPLIANT/PARTIAL/AT_RISK chips.
+- **Framework catalog**: NIST CSF 2.0, CIS v8, ISO/IEC 27001:2022, PCI-DSS, OWASP ASVS + PROTOTYPE — each with authored `Applicable|Optional|Organization-selected`, scope and a disclaimer. *Not claimed as regulatory fact.*
+- **Regional policy profiles**: Global Baseline + 5 regional policies; an asset selects deterministically by region (refresh-safe).
+- **Asset decision trace**: pick **API-GATEWAY-01** → policy **INDIA_ENTERPRISE**, 14 applicable controls, 14 findings. Open the asset.
+- On the asset's **Adaptive Governance** panel: controls grid with `whyApplicable` per control; under Governance exceptions click **Request exception** (pick `TLS-001`, reason, 30 days) → status **REQUESTED** → **Approve** → notice *"renders FAIL + EXCEPTION APPROVED until …"*. Never a silent PASS.
+- Back to **Enterprise → Audit Trail**: filter `Governance exception decided` → the decision is timestamped, actor-attributed, append-only. Dashboard **Regional & framework posture** panel echoes the same numbers.
+> Speak to: *the policy is data, not code — swap a regional profile and the applicability engine re-derives the posture; exceptions are governed decisions, so a FAIL stays visible as FAIL + EXCEPTION APPROVED.*
 
 ## Exit hooks for judges
 - "How is this adaptive?" → unknown vendor + AI proposal + approval + structural-fingerprint reuse.

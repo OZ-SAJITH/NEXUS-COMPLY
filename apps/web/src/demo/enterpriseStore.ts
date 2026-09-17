@@ -1,10 +1,12 @@
 import type {
   AiProviderMode,
+  ApplicableControlsResult,
   AssetConnectorProfile,
   AssetFinding,
   AssetRecord,
   AssetScanRecord,
   AuditEventRecord,
+  ComplianceFramework2,
   ComplianceSummary,
   ConnectorRecord,
   ConnectorTestResult,
@@ -12,12 +14,18 @@ import type {
   EvidenceWithVerification,
   FindingAnalysis,
   FindingLifecycle,
+  GovernanceDecisionTrace,
+  GovernanceException,
+  GovernanceExceptionDecision,
+  GovernanceExceptionRequest,
+  OrganizationBaseline,
+  PolicyProfile,
+  PolicySelection,
   RemediationExecutionLogEntry,
   RemediationRecord,
   UserRole,
 } from "@nexus/shared-types";
 import {
-  ASSET_CONTROL_FRAMEWORK_LABELS,
   CRITICALITY_WEIGHT,
   REGIONS,
   TIERS,
@@ -49,6 +57,15 @@ import {
   seededConnectors,
   topologyConnections,
   verifyEvidenceRecord,
+  COMPLIANCE_FRAMEWORKS,
+  POLICY_PROFILES,
+  DEFAULT_ORGANIZATION_BASELINE,
+  controlFrameworkMappings,
+  selectPolicyForAsset,
+  applicableControlsForAsset,
+  buildGovernanceTrace,
+  computeRegionalPosture,
+  computeFrameworkPosture,
 } from "@nexus/enterprise-catalog";
 
 const STORAGE_KEY = "nexus-enterprise-v1";
@@ -70,6 +87,8 @@ interface Persisted {
   remediations: RemediationRecord[];
   analyses: FindingAnalysis[];
   events: AuditEventRecord[];
+  governanceExceptions: GovernanceException[];
+  organizationBaseline: OrganizationBaseline;
 }
 
 let uidCounter = 0;
@@ -86,6 +105,8 @@ function init(): Persisted {
   const raw = localStorage.getItem(STORAGE_KEY);
   const parsed = raw ? safeParse(raw) : undefined;
   persisted = parsed ?? seed();
+  if (!persisted.governanceExceptions) persisted.governanceExceptions = [];
+  if (!persisted.organizationBaseline) persisted.organizationBaseline = DEFAULT_ORGANIZATION_BASELINE;
   if (parsed) {
     const byId = new Map(persisted.connectors.map((c) => [c.id, c]));
     let added = false;
@@ -135,16 +156,19 @@ const ACTOR = { id: "user.demo", name: "Demo Operator", role: "security_architec
 // ---------------------------------------------------------------------------
 
 function seed(): Persisted {
-  const connectors: ConnectorRecord[] = seededConnectors().map((c) => {
-    const status = probeConnectorStatus(c, Math.floor(Date.now() / 1000));
-    return { ...c, status, lastContactAt: status === "ONLINE" ? new Date().toISOString() : undefined };
-  });
+  // Authored seed statuses are retained so the demo is reproducible at any time
+  // of day; live connector probing happens only via the explicit
+  // probeConnectors()/testConnector() flows (matches localStorage-persisted state).
+  const connectors: ConnectorRecord[] = seededConnectors().map((c) => ({
+    ...c,
+    lastContactAt: c.status === "ONLINE" ? new Date().toISOString() : undefined,
+  }));
 
   // Seeds the KNOWN (managed) estate only. The spec's 14-asset regional wave is
   // intentionally NOT pre-created: the first "Discover Assets" click genuinely
   // discovers it, and re-runs are idempotent.
   const discovered = matureEstate(knownEstateRecords(assetRelationships()));
-  const state: Persisted = { assets: discovered, connectors, evidence: [], assetScans: [], remediations: [], analyses: [], events: [] };
+  const state: Persisted = { assets: discovered, connectors, evidence: [], assetScans: [], remediations: [], analyses: [], events: [], governanceExceptions: [], organizationBaseline: DEFAULT_ORGANIZATION_BASELINE };
   const hero = state.assets.find((a) => a.id.startsWith("ast-api-gateway-01"));
   if (!hero) return state;
 
@@ -530,6 +554,8 @@ export const enterpriseDemo = {
     const byCategoryMap = new Map<string, { passed: number; failed: number; warnings: number }>();
     const bySeverityMap = new Map<string, number>();
     const lifecycleMap = new Map<string, number>();
+    const controlResults = new Map<string, Array<{ controlId: string; status: import("@nexus/shared-types").FindingStatus }>>();
+    const latestFindings = new Map<string, AssetFinding[]>();
     let evaluated = 0;
     for (const asset of persisted.assets) {
       const results = evaluateEvidenceForAsset(asset);
@@ -540,15 +566,20 @@ export const enterpriseDemo = {
       totals.passed += passed;
       totals.failed += failed;
       totals.warnings += warnings;
+      const assetResults = controlResults.get(asset.id) ?? [];
       for (const r of results) {
+        assetResults.push({ controlId: r.ruleId, status: r.evaluation.status });
         const c = byCategoryMap.get(r.category) ?? { passed: 0, failed: 0, warnings: 0 };
         if (r.evaluation.status === "PASS") c.passed += 1;
         else if (r.evaluation.status === "FAIL") c.failed += 1;
         else if (r.evaluation.status === "WARNING") c.warnings += 1;
         byCategoryMap.set(r.category, c);
       }
+      controlResults.set(asset.id, assetResults);
       const scan = latestScan(persisted, asset.id);
-      for (const f of scan?.findings ?? []) {
+      const assetFindings = scan?.findings ?? [];
+      latestFindings.set(asset.id, assetFindings.map((f) => ({ ...f, assetId: asset.id, assetType: asset.assetType, location: asset.location })));
+      for (const f of assetFindings) {
         if (f.status === "FAIL" || f.status === "WARNING") {
           bySeverityMap.set(f.severity, (bySeverityMap.get(f.severity) ?? 0) + 1);
         }
@@ -568,6 +599,8 @@ export const enterpriseDemo = {
       byCategory: [...byCategoryMap.entries()].map(([category, v]) => ({ category, ...v })),
       bySeverity: [...bySeverityMap.entries()].map(([severity, count]) => ({ severity: severity as AssetFinding["severity"], count })),
       lifecycleBreakdown: [...lifecycleMap.entries()].map(([lifecycle, count]) => ({ lifecycle: lifecycle as FindingLifecycle, count })),
+      byRegion: computeRegionalPosture(persisted.assets, controlResults),
+      byFramework: computeFrameworkPosture(persisted.assets, (id) => latestFindings.get(id) ?? []),
       generatedAt: new Date().toISOString(),
     };
   },
@@ -638,8 +671,8 @@ export const enterpriseDemo = {
     return getAssetControls();
   },
 
-  frameworks() {
-    return { labels: ASSET_CONTROL_FRAMEWORK_LABELS, controls: getAssetControls() };
+  frameworks(): ComplianceFramework2[] {
+    return COMPLIANCE_FRAMEWORKS;
   },
 
   evidenceById(id: string): EvidenceRecord | undefined {
@@ -905,6 +938,151 @@ export const enterpriseDemo = {
 
   auditEvents(): AuditEventRecord[] {
     return [...persisted.events].sort((a, b) => (a.at < b.at ? 1 : -1));
+  },
+
+  // ---- Governance: frameworks, policies, applicable controls, traces, exceptions ----
+
+  frameworkById(id: string): ComplianceFramework2 {
+    const fw = COMPLIANCE_FRAMEWORKS.find((f) => f.id === id);
+    if (!fw) fail(404, "Framework not found");
+    return fw;
+  },
+
+  listPolicies(): PolicyProfile[] {
+    return POLICY_PROFILES;
+  },
+
+  policyById(id: string): PolicyProfile {
+    const p = POLICY_PROFILES.find((pp) => pp.profileId === id);
+    if (!p) fail(404, "Policy profile not found");
+    return p;
+  },
+
+  selectPolicy(assetId: string): PolicySelection {
+    const asset = mustAsset(persisted, assetId);
+    return selectPolicyForAsset(asset, persisted.organizationBaseline);
+  },
+
+  assetApplicableControls(assetId: string): ApplicableControlsResult {
+    const asset = mustAsset(persisted, assetId);
+    return applicableControlsForAsset(asset, persisted.organizationBaseline);
+  },
+
+  assetGovernance(assetId: string): GovernanceDecisionTrace {
+    const asset = mustAsset(persisted, assetId);
+    const evidence = persisted.evidence.filter((e) => e.assetId === assetId);
+    const results = evaluateEvidenceForAsset(asset, evidence);
+    const findings: AssetFinding[] = results.map((r) => ({
+      id: uid("af"),
+      auditId: asset.id,
+      controlId: r.ruleId,
+      controlName: r.name,
+      severity: r.severity,
+      status: r.evaluation.status,
+      what: r.evaluation.reason,
+      why: r.evaluation.reason,
+      where: `${asset.hostname} (${asset.ipAddress})`,
+      risk: r.evaluation.status === "FAIL" ? 70 : 20,
+      impact: "",
+      recommendedFix: r.remediation,
+      evidence: [],
+      references: { controlId: r.ruleId },
+      assetId: asset.id,
+      evidenceIds: r.evidenceId ? [r.evidenceId] : [],
+      assetType: asset.assetType,
+      location: asset.location,
+    }));
+    return buildGovernanceTrace(
+      asset,
+      results.map((r) => ({
+        controlId: r.ruleId,
+        status: r.evaluation.status,
+        observedValue: r.evaluation.observedValue,
+        expectedValue: r.evaluation.expectedValue,
+      })),
+      findings,
+      persisted.governanceExceptions,
+      persisted.organizationBaseline,
+    );
+  },
+
+  assetFrameworks(assetId: string) {
+    const asset = mustAsset(persisted, assetId);
+    const governance = this.assetGovernance(assetId);
+    return {
+      assetId: asset.id,
+      region: governance.region,
+      regionLabel: governance.regionLabel,
+      frameworks: governance.frameworks.map((f) => ({
+        id: f.id,
+        name: f.name,
+        version: f.version,
+        status: f.status,
+        disclaimer: f.disclaimer,
+        mappings: governance.applicableControls
+          .filter((c) => {
+            const mappings = controlFrameworkMappings(c.controlId);
+            return mappings.some((m) => m.framework === f.id);
+          })
+          .map((c) => {
+            const mappings = controlFrameworkMappings(c.controlId);
+            const mapping = mappings.find((m) => m.framework === f.id);
+            return { controlId: c.controlId, controlName: c.controlName, ...mapping };
+          }),
+      })),
+      generatedAt: new Date().toISOString(),
+    };
+  },
+
+  listExceptions(assetId?: string): GovernanceException[] {
+    const all = persisted.governanceExceptions;
+    const filtered = assetId ? all.filter((e) => e.assetId === assetId) : all;
+    return filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  requestException(body: GovernanceExceptionRequest): GovernanceException {
+    const asset = mustAsset(persisted, body.assetId);
+    const control = getAssetControls().find((c) => c.id === body.controlId);
+    if (!control) fail(404, "Control not found");
+
+    const now = new Date().toISOString();
+    const expiresInDays = body.expiresInDays ?? 90;
+    const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
+
+    const exception: GovernanceException = {
+      id: uid("gov-exc"),
+      controlId: body.controlId,
+      controlName: control.name,
+      assetId: body.assetId,
+      assetName: asset.name,
+      reason: body.reason,
+      requestedBy: body.requestedBy,
+      status: "REQUESTED",
+      createdAt: now,
+      expiresAt,
+    };
+
+    persisted.governanceExceptions.push(exception);
+    logEvent(persisted, makeEvent("GOVERNANCE_EXCEPTION_REQUESTED", "governance", exception.id, body.assetId, body.controlId, undefined, "human", { assetId: body.assetId, controlId: body.controlId, reason: body.reason, requestedBy: body.requestedBy }));
+    persist();
+    return exception;
+  },
+
+  decideException(decision: GovernanceExceptionDecision): GovernanceException {
+    const exception = persisted.governanceExceptions.find((e) => e.id === decision.exceptionId);
+    if (!exception) fail(404, "Exception not found");
+
+    exception.status = decision.decision;
+    exception.approvedBy = decision.decidedBy;
+    if (decision.decision === "REJECTED") {
+      exception.rejectionReason = decision.reason;
+    } else if (decision.decision === "APPROVED" && decision.expiresInDays) {
+      exception.expiresAt = new Date(Date.now() + decision.expiresInDays * 86400000).toISOString();
+    }
+
+    logEvent(persisted, makeEvent("GOVERNANCE_EXCEPTION_DECIDED", "governance", exception.id, exception.assetId, exception.controlId, undefined, "human", { decision: decision.decision, decidedBy: decision.decidedBy, reason: decision.reason }));
+    persist();
+    return exception;
   },
 
   approvedActionsForType(assetType: string): string[] {

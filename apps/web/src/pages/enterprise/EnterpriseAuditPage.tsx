@@ -24,6 +24,8 @@ const EVENT_STYLE: Record<string, string> = {
   REMEDIATION_VERIFICATION_FAILED: "border-red-500/40 bg-red-500/10 text-red-300",
   REMEDIATION_ROLLED_BACK: "border-orange-500/40 bg-orange-500/10 text-orange-300",
   CONNECTOR_STATUS_CHANGED: "border-purple-500/40 bg-purple-500/10 text-purple-300",
+  GOVERNANCE_EXCEPTION_REQUESTED: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  GOVERNANCE_EXCEPTION_DECIDED: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300",
 };
 
 export default function EnterpriseAuditPage() {
@@ -43,7 +45,7 @@ export default function EnterpriseAuditPage() {
     <div className="animate-fade-in space-y-6">
       <PageHeader
         title="Enterprise Audit Trail"
-        subtitle="Append-only, source-tagged ledger of discovery, scanning, evidence collection, AI analysis and every remediation transition."
+        subtitle="Append-only, source-tagged ledger of discovery, scanning, evidence collection, AI analysis, governance exceptions and every remediation transition."
       />
       <EnterpriseTabs />
 

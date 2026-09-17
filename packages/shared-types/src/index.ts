@@ -384,14 +384,16 @@ export type AuditEventType =
   | "REMEDIATION_VERIFICATION_FAILED"
   | "REMEDIATION_ROLLED_BACK"
   | "FINDING_LIFECYCLE_CHANGED"
-  | "CONNECTOR_STATUS_CHANGED";
+  | "CONNECTOR_STATUS_CHANGED"
+  | "GOVERNANCE_EXCEPTION_REQUESTED"
+  | "GOVERNANCE_EXCEPTION_DECIDED";
 
 export type AuditEventSource = "system" | "ai" | "human";
 
 export interface AuditEventRecord {
   id: string;
   eventType: AuditEventType;
-  entityType: "finding" | "audit" | "ai_interpretation" | "asset" | "evidence" | "remediation" | "connector";
+  entityType: "finding" | "audit" | "ai_interpretation" | "asset" | "evidence" | "remediation" | "connector" | "governance";
   entityId: string;
   findingId?: string;
   auditId: string;
@@ -1464,6 +1466,8 @@ export interface AssetFinding extends Finding {
   expectedValue?: string;
   /** Structured remediation guidance emitted by the rule engine. */
   remediationGuidance?: string;
+  /** PHASE 4: Governance context for this finding (region, policy, frameworks, exception status). */
+  governanceContext?: GovernanceFindingContext;
 }
 
 export interface AssetScanRecord {
@@ -1788,6 +1792,10 @@ export interface ComplianceSummary {
   byCategory: Array<{ category: string; passed: number; failed: number; warnings: number }>;
   bySeverity: Array<{ severity: Severity; count: number }>;
   lifecycleBreakdown: Array<{ lifecycle: FindingLifecycle; count: number }>;
+  /** PHASE 4: Regional posture breakdown. */
+  byRegion?: RegionalPosture[];
+  /** PHASE 4: Framework coverage breakdown. */
+  byFramework?: FrameworkPosture[];
   generatedAt: string;
 }
 
@@ -1798,4 +1806,239 @@ export interface ComplianceSummary {
 export interface FindingLifecycleUpdate {
   lifecycle: Extract<FindingLifecycle, "ACKNOWLEDGED" | "EXCEPTED" | "OPEN">;
   reason?: string;
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 4 — Global Adaptive Governance + Multi-Framework Compliance
+// ---------------------------------------------------------------------------
+
+export type MappingStatus = "MAPPED" | "REVIEW_REQUIRED";
+
+export type FrameworkScope = "TECHNICAL" | "REGULATORY" | "INDUSTRY";
+
+export type FrameworkStatus = "ACTIVE" | "CONDITIONAL" | "NOT_APPLICABLE";
+
+/**
+ * Multi-framework compliance definition for the adaptive governance engine.
+ * Each framework covers technical security controls at the asset level.
+ */
+export interface ComplianceFramework2 {
+  id: AssetControlFramework;
+  name: string;
+  version: string;
+  description: string;
+  scope: FrameworkScope;
+  status: FrameworkStatus;
+  applicability: "Applicable" | "Optional" | "Organization-selected" | "Not applicable";
+  disclaimer: string;
+}
+
+/**
+ * Mapping between an asset-level compliance control and a framework control.
+ * mappingStatus indicates whether the mapping is verified or needs review.
+ */
+export interface FrameworkControlMapping2 {
+  framework: AssetControlFramework;
+  mappingStatus: MappingStatus;
+  mappingRef?: string;
+  note: string;
+}
+
+export type RegionKey = "GLOBAL" | "IND" | "USA" | "SGP" | "EU" | "UK";
+
+/**
+ * Regional policy profile: determines which frameworks and controls
+ * apply to assets in a given region, considering production/production-like
+ * environments vs. development.
+ */
+export interface PolicyProfile {
+  profileId: string;
+  name: string;
+  region: RegionKey;
+  regionLabel: string;
+  description: string;
+  enabledFrameworks: AssetControlFramework[];
+  severityOverrides: Partial<Record<string, Severity>>;
+  exceptions: GovernanceExceptionRef[];
+  version: string;
+  status: "ACTIVE" | "DRAFT";
+}
+
+/**
+ * Organization-level baseline configuration.
+ * Defines the global minimum security posture that applies to all assets.
+ */
+export interface OrganizationBaseline {
+  id: string;
+  name: string;
+  version: string;
+  minTls: string;
+  requireLogging: boolean;
+  dbEncryption: boolean;
+  privilegedAccessRestricted: boolean;
+  enabledControls: string[];
+  enabledFrameworks: AssetControlFramework[];
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Result of automatic policy selection for an asset.
+ * Deterministic: same asset context always produces the same selection.
+ */
+export interface PolicySelection {
+  assetId: string;
+  region: RegionKey;
+  regionLabel: string;
+  environment: AssetEnvironment;
+  criticality: AssetCriticality;
+  assetType: AssetType;
+  policyProfileId: string;
+  policyProfileName: string;
+  organizationPolicy: string;
+  frameworks: Array<{ id: AssetControlFramework; name: string; version: string; status: FrameworkStatus }>;
+  applicableControls: string[];
+  explanation: string[];
+  disclaimer: string;
+  selectedAt: string;
+}
+
+export interface ApplicableControl {
+  controlId: string;
+  controlName: string;
+  severity: Severity;
+  whyApplicable: string;
+  frameworkMembership: AssetControlFramework[];
+}
+
+/**
+ * List of controls applicable to an asset, derived from its type, region,
+ * environment, criticality, and the selected policy profile.
+ */
+export interface ApplicableControlsResult {
+  assetId: string;
+  region: RegionKey;
+  environment: AssetEnvironment;
+  criticality: AssetCriticality;
+  assetType: AssetType;
+  total: number;
+  applicable: ApplicableControl[];
+  excluded: Array<{ controlId: string; controlName: string; reason: string }>;
+  disclaimer: string;
+  generatedAt: string;
+}
+
+export type GovernanceExceptionStatus = "REQUESTED" | "APPROVED" | "REJECTED" | "EXPIRED";
+
+/**
+ * Runtime exception against a specific control finding.
+ * Approved exceptions suppress FAIL status; expired exceptions stop suppressing.
+ */
+export interface GovernanceException {
+  id: string;
+  controlId: string;
+  controlName: string;
+  assetId: string;
+  assetName: string;
+  reason: string;
+  requestedBy: string;
+  approvedBy?: string;
+  status: GovernanceExceptionStatus;
+  createdAt: string;
+  expiresAt: string;
+  rejectionReason?: string;
+}
+
+export interface GovernanceExceptionRef {
+  id: string;
+  status: GovernanceExceptionStatus;
+  reason: string;
+  expiresAt: string;
+}
+
+/**
+ * Governance context attached to each finding.
+ * Shows why the control is applicable and whether an exception is active.
+ */
+export interface GovernanceFindingContext {
+  region: RegionKey;
+  regionLabel: string;
+  policyProfileId: string;
+  policyProfileName: string;
+  frameworks: AssetControlFramework[];
+  whyApplicable: string;
+  exception?: GovernanceExceptionRef;
+}
+
+/**
+ * Full decision trace for an asset: shows the organization policy,
+ * selected regional policy, applicable frameworks and controls,
+ * evidence-grounded findings, and active exceptions.
+ */
+export interface GovernanceDecisionTrace {
+  assetId: string;
+  assetName: string;
+  assetType: AssetType;
+  region: RegionKey;
+  regionLabel: string;
+  environment: AssetEnvironment;
+  criticality: AssetCriticality;
+  organizationPolicy: { id: string; name: string; version: string };
+  regionalPolicy: { profileId: string; name: string; region: RegionKey; regionLabel: string };
+  frameworks: Array<{ id: AssetControlFramework; name: string; version: string; status: FrameworkStatus; disclaimer: string }>;
+  applicableControls: Array<{ controlId: string; controlName: string; severity: Severity; whyApplicable: string }>;
+  evidence: Array<{ controlId: string; status: FindingStatus; observedValue: string; expectedValue: string }>;
+  findings: Array<{ controlId: string; controlName: string; status: FindingStatus; severity: Severity; risk: number }>;
+  exceptions: GovernanceException[];
+  disclaimer: string;
+  generatedAt: string;
+}
+
+/**
+ * Regional posture: aggregate compliance scores per geographic region.
+ */
+export interface RegionalPosture {
+  region: RegionKey;
+  regionLabel: string;
+  assetCount: number;
+  score: number;
+  passed: number;
+  failed: number;
+  warnings: number;
+  findings: number;
+}
+
+/**
+ * Framework posture: aggregate compliance scores per framework.
+ */
+export interface FrameworkPosture {
+  framework: AssetControlFramework;
+  label: string;
+  totalControls: number;
+  passed: number;
+  failed: number;
+  score: number;
+  status: "COMPLIANT" | "PARTIAL" | "AT_RISK" | "NOT_ASSESSED";
+}
+
+/**
+ * Request body for creating a governance exception.
+ */
+export interface GovernanceExceptionRequest {
+  controlId: string;
+  assetId: string;
+  reason: string;
+  requestedBy: string;
+  expiresInDays?: number;
+}
+
+/**
+ * Request body for approving/rejecting a governance exception.
+ */
+export interface GovernanceExceptionDecision {
+  exceptionId: string;
+  decision: "APPROVED" | "REJECTED";
+  decidedBy: string;
+  reason?: string;
+  expiresInDays?: number;
 }
