@@ -30,6 +30,7 @@ import {
   REGIONS,
   TIERS,
   applyRemediationAction,
+  authorizeConnectorAction,
   assetRelationships,
   buildImpactGraph,
   buildProposal,
@@ -847,6 +848,18 @@ export const enterpriseDemo = {
       persist();
       return rem;
     }
+    const auth = authorizeConnectorAction({ connector, action: rem.proposedAction.actionType });
+    if (!auth.allowed) {
+      logs.push({ at: new Date().toISOString(), level: "ERROR", message: `Connector policy gate denied: ${auth.reason}` });
+      rem.status = "FAILED";
+      rem.execution.status = "FAILED";
+      rem.execution.logs = logs;
+      rem.updatedAt = new Date().toISOString();
+      logEvent(persisted, makeEvent("REMEDIATION_EXECUTED", "remediation", rem.id, rem.assetId, rem.controlId, rem.findingId, "system", { status: "FAILED", error: auth.reason, connector: connector.name, mode: auth.mode, policyGate: true }));
+      persist();
+      return rem;
+    }
+    logs.push({ at: new Date().toISOString(), level: "INFO", message: `Connector policy gate: ${auth.mode} — ${auth.reason}` });
     const applied = applyRemediationAction(asset, rem.proposedAction.actionType, rem.proposedAction.parameters);
     logs.push({ at: new Date().toISOString(), level: "INFO", message: `Simulated action applied: ${applied.message}` });
     logs.push({ at: new Date().toISOString(), level: "INFO", message: "Snapshot of prior observed state retained for rollback." });

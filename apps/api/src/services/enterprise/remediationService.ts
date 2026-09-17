@@ -8,7 +8,7 @@ import type {
   RemediationValidationResult,
   UserRole,
 } from "@nexus/shared-types";
-import { applyRemediationAction, buildProposal, canTransition } from "@nexus/enterprise-catalog";
+import { applyRemediationAction, authorizeConnectorAction, buildProposal, canTransition } from "@nexus/enterprise-catalog";
 import { ApiError } from "../reviewService";
 import { uniqueId } from "../../utils/helpers";
 import { findAssetFinding, scanAsset, applyFindingLifecycle, type Instantiation, reevaluateControl } from "./assetService";
@@ -241,6 +241,30 @@ export async function executeRemediation(ctx: Instantiation, remId: string, acto
   }
 
   await simulatedDelay(320);
+
+  const auth = authorizeConnectorAction({ connector, action: rem.proposedAction.actionType });
+  if (!auth.allowed) {
+    logs.push({ at: new Date().toISOString(), level: "ERROR", message: `Connector policy gate denied: ${auth.reason}` });
+    rem.status = "FAILED";
+    rem.execution.status = "FAILED";
+    rem.execution.logs = logs;
+    await saveAndLog(ctx, rem, {
+      eventType: "REMEDIATION_EXECUTED",
+      entityType: "remediation",
+      entityId: rem.id,
+      findingId: rem.findingId,
+      auditId: rem.assetId,
+      controlId: rem.controlId,
+      actorId: actor.id,
+      actorName: actor.name,
+      actorRole: actor.role,
+      source: "system",
+      detail: { status: "FAILED", error: auth.reason, connector: connector.name, mode: auth.mode, policyGate: true },
+    });
+    return rem;
+  }
+  logs.push({ at: new Date().toISOString(), level: "INFO", message: `Connector policy gate: ${auth.mode} — ${auth.reason}` });
+
   const applied = applyRemediationAction(asset, rem.proposedAction.actionType, rem.proposedAction.parameters);
   logs.push({ at: new Date().toISOString(), level: "INFO", message: `Simulated action applied: ${applied.message}` });
   logs.push({ at: new Date().toISOString(), level: "INFO", message: "Snapshot of prior observed state retained for rollback." });

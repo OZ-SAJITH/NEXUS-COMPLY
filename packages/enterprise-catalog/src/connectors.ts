@@ -222,3 +222,62 @@ function scoreConnector(c: ConnectorRecord, assetType: AssetType, vendor: string
   if (c.type !== "APPLICATION" && c.supportedAssetTypes.includes(assetType)) score -= 30;
   return score;
 }
+
+// ---------------------------------------------------------------------------
+// Production connector boundary — the policy gate.
+//
+// The prototype ships ONLY simulated adapters (simulated: true). A production
+// connector is a real adapter implementing the same ConnectorCapabilities
+// contract, but execution through it is DENIED until the operator explicitly
+// enables production adapters AND allowlists the adapter's vendor. This keeps
+// the orchestration honest: nothing ever claims production execution.
+// ---------------------------------------------------------------------------
+
+/** SIMULATED = prototype adapter (controlled environment) · PRODUCTION = real registered adapter. */
+export type ConnectorMode = "SIMULATED" | "PRODUCTION";
+
+export interface ProductionConnectorPolicy {
+  /** Master switch: allow ANY production adapter to execute. Default false. */
+  allowProductionAdapters: boolean;
+  /** Vendors explicitly registered for production execution. Default empty. */
+  allowlistedVendors: ConnectorVendorId[];
+}
+
+export const DEFAULT_PRODUCTION_CONNECTOR_POLICY: ProductionConnectorPolicy = {
+  allowProductionAdapters: false,
+  allowlistedVendors: [],
+};
+
+export function connectorModeFor(connector: Pick<ConnectorRecord, "id" | "simulated">): ConnectorMode {
+  return connector.simulated === false ? "PRODUCTION" : "SIMULATED";
+}
+
+export interface ConnectorActionAuthorization {
+  allowed: boolean;
+  mode: ConnectorMode;
+  action: string;
+  reason: string;
+}
+
+export function authorizeConnectorAction(input: {
+  connector: Pick<ConnectorRecord, "id" | "simulated" | "vendor" | "authorizedActions">;
+  action: string;
+  policy?: ProductionConnectorPolicy;
+}): ConnectorActionAuthorization {
+  const policy = input.policy ?? DEFAULT_PRODUCTION_CONNECTOR_POLICY;
+  const mode = connectorModeFor(input.connector);
+  const authorizedActions = input.connector.authorizedActions ?? [];
+  if (!authorizedActions.includes(input.action as RemediationActionType)) {
+    return { allowed: false, mode, action: input.action, reason: `${input.action} is not in ${input.connector.id} authorizedActions.` };
+  }
+  if (mode === "SIMULATED") {
+    return { allowed: true, mode, action: input.action, reason: "Simulated adapter — action executes against the controlled SIMULATED enterprise." };
+  }
+  if (!policy.allowProductionAdapters) {
+    return { allowed: false, mode, action: input.action, reason: "Production execution is disabled (allowProductionAdapters=false)." };
+  }
+  if (!policy.allowlistedVendors.some((v) => v.toLowerCase() === input.connector.vendor.toLowerCase())) {
+    return { allowed: false, mode, action: input.action, reason: `Vendor ${input.connector.vendor} is not allowlisted for production execution.` };
+  }
+  return { allowed: true, mode, action: input.action, reason: "Production adapter vetted and allowlisted; execution gated by policy." };
+}

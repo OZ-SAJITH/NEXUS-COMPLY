@@ -1333,7 +1333,7 @@ export interface ConnectorRecord {
   version: string;
   status: ConnectorStatus;
   lastContactAt?: string;
-  simulated: true;
+  simulated: boolean;
   authorizedActions: RemediationActionType[];
   supportedAssetTypes: AssetType[];
   connectError?: string;
