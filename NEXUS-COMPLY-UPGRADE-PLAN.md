@@ -127,6 +127,19 @@ apps/web (extended)
 - `apps/web/src/components/assets/*` (AssetCard, AssetStatusChip, DiscoveryWizard,
   ImpactGraphView, ConnectorHealthList, RemediationWorkflow, EvidenceInspector,
   RiskExplainCard, GlobalPosturePanel)
+  - Shipped so far (PHASE 4 follow-up): `PostureCards` (shared byRegion/byFramework
+    cards used by both `DashboardPage` and the `GovernancePage` hub) and
+    `GovernanceExceptionBadge` (shared exception-status chip used by
+    `AssetDetailPage` and `GovernancePage`, replacing duplicated inline copies),
+    `EvidenceInspector` (normalized evidence row + recomputed SHA-256 integrity),
+    `ConnectorHealthList` (managing-connector health card),
+    `RiskExplainCard` (finding card + expandable evidence-grounded risk), all
+    extracted from `AssetDetailPage`; `RemediationWorkflow` (the validate →
+    approve → execute → verify → rollback card) extracted from
+    `RemediationsPage`; and `GlobalPosturePanel` (AI-vs-human compliance rings +
+    per-domain bars) extracted from `DashboardPage`. Remaining entries
+    (AssetCard, AssetStatusChip, DiscoveryWizard, ImpactGraphView) are covered
+    inline by the shipped pages above.
 
 ---
 

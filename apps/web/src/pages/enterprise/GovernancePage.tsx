@@ -9,23 +9,8 @@ import { LoadingState, ErrorState } from "../../components/states";
 import { EnterpriseTabs } from "./EnterpriseTabs";
 import { cn, timeAgo } from "../../utils/cn";
 import { currentUser } from "../../session";
-
-const FRAMEWORK_TONE: Record<string, string> = {
-  COMPLIANT: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-  PARTIAL: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-  AT_RISK: "border-red-500/40 bg-red-500/10 text-red-300",
-  NOT_ASSESSED: "border-slate-500/40 bg-slate-500/10 text-slate-400",
-};
-
-function ExceptionBadge({ status }: { status: GovernanceException["status"] }) {
-  const styles: Record<string, string> = {
-    REQUESTED: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-    APPROVED: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-    REJECTED: "border-red-500/40 bg-red-500/10 text-red-300",
-    EXPIRED: "border-slate-500/40 bg-slate-500/10 text-slate-400",
-  };
-  return <span className={cn("px-2 py-0.5 rounded-md border text-[10px] font-semibold uppercase tracking-wider", styles[status] ?? styles.REQUESTED)}>{status}</span>;
-}
+import { GovernanceExceptionBadge } from "../../components/assets/GovernanceExceptionBadge";
+import { PostureCards } from "../../components/assets/PostureCards";
 
 function FrameworkCatalog({ frameworks }: { frameworks: ComplianceFramework2[] }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -291,7 +276,7 @@ function ExceptionRegistry() {
                     <Link to={`/app/enterprise/assets/${exc.assetId}`} className="text-slate-300 hover:text-accent">{exc.assetName}</Link>
                     <div className="text-[10px] text-slate-600">{exc.reason.slice(0, 60)}{exc.reason.length > 60 ? "…" : ""}</div>
                   </td>
-                  <td className="py-2 pr-3"><ExceptionBadge status={exc.status} /></td>
+                  <td className="py-2 pr-3"><GovernanceExceptionBadge status={exc.status} /></td>
                   <td className="py-2 pr-3 text-slate-400">{exc.requestedBy}</td>
                   <td className="py-2 pr-3 font-mono text-slate-500">{new Date(exc.expiresAt).toLocaleDateString()}</td>
                   <td className="py-2 text-right whitespace-nowrap">
@@ -325,50 +310,7 @@ function PostureStrip({ summary }: { summary: ComplianceSummary }) {
         <Scale className="w-4 h-4 text-accent" aria-hidden="true" />
         <h2 className="text-base font-semibold text-slate-100">Regime posture</h2>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card !p-4">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">By region</div>
-          <div className="space-y-3">
-            {byRegion.map((r) => {
-              const total = r.passed + r.failed + r.warnings;
-              const ratio = total ? (r.passed / total) * 100 : 0;
-              return (
-                <div key={r.region}>
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-slate-300">{r.regionLabel} <span className="text-slate-600">· {r.assetCount} assets</span></span>
-                    <span className="font-mono text-slate-300">{r.score}% <span className="text-slate-600">({r.passed} passed · {r.failed} failed · {r.warnings} warnings)</span></span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-surface-800 overflow-hidden">
-                    <div className="h-full rounded-full bg-emerald-400/80 transition-all duration-700" style={{ width: `${Math.max(0, Math.min(100, ratio))}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="card !p-4">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">By framework</div>
-          <div className="space-y-3">
-            {byFramework.map((f) => (
-              <div key={f.framework}>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-slate-300">{f.label}</span>
-                  <span className="inline-flex items-center gap-2">
-                    <span className="font-mono text-slate-400">{f.score}% · {f.passed}/{f.totalControls}</span>
-                    <span className={cn("px-1.5 py-0.5 rounded border text-[10px] font-semibold uppercase tracking-wider", FRAMEWORK_TONE[f.status] ?? FRAMEWORK_TONE.NOT_ASSESSED)}>{f.status.replace("_", " ")}</span>
-                  </span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-surface-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${Math.max(0, Math.min(100, f.score))}%`, backgroundColor: f.status === "AT_RISK" ? "#ef4444" : f.status === "PARTIAL" ? "#f59e0b" : f.status === "COMPLIANT" ? "#34d399" : "#64748b" }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PostureCards byRegion={byRegion} byFramework={byFramework} />
     </section>
   );
 }

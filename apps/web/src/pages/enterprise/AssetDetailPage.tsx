@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ScanSearch, BrainCircuit, AlignLeft, PlugZap, ChevronDown, ChevronRight, ShieldCheck, ShieldAlert, Scale } from "lucide-react";
-import type { ApplicableControlsResult, AssetConnectorProfile, AssetFinding, AssetRecord, AssetScanRecord, EvidenceRecord, EvidenceWithVerification, FindingAnalysis, GovernanceDecisionTrace, GovernanceException, PolicySelection, RemediationRecord } from "@nexus/shared-types";
+import { ArrowLeft, ScanSearch, BrainCircuit, Scale } from "lucide-react";
+import type { ApplicableControlsResult, AssetConnectorProfile, AssetRecord, AssetScanRecord, EvidenceRecord, EvidenceWithVerification, FindingAnalysis, GovernanceDecisionTrace, GovernanceException, PolicySelection, RemediationRecord } from "@nexus/shared-types";
 import { api } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { PageHeader } from "../../components/PageHeader";
@@ -9,191 +9,12 @@ import { LoadingState, ErrorState, EmptyState } from "../../components/states";
 import { SeverityBadge, StatusBadge, Card, SectionTitle } from "../../components/ui";
 import { RiskGauge } from "../../components/RiskGauge";
 import { RemediationStatusBadge } from "./EnterpriseTabs";
-import { cn, timeAgo, formatDate } from "../../utils/cn";
+import { timeAgo, formatDate } from "../../utils/cn";
 import { currentUser } from "../../session";
-
-function LifecycleBadge({ lifecycle }: { lifecycle?: AssetFinding["lifecycle"] }) {
-  const lc = lifecycle ?? "OPEN";
-  const styles: Record<string, string> = {
-    OPEN: "border-slate-500/40 bg-slate-500/10 text-slate-300",
-    ACKNOWLEDGED: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-    REMEDIATION_PLANNED: "border-sky-500/40 bg-sky-500/10 text-sky-300",
-    REMEDIATED: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-    VERIFIED: "border-emerald-400/50 bg-emerald-400/10 text-emerald-200",
-    EXCEPTED: "border-purple-500/40 bg-purple-500/10 text-purple-300",
-  };
-  return <span className={cn("px-2 py-0.5 rounded-md border text-[10px] font-semibold uppercase tracking-wider", styles[lc])}>{lc}</span>;
-}
-
-function FindingRow({ finding, assetId, onAnalyze, onRemediate, onLifecycle }: { finding: AssetFinding; assetId: string; onAnalyze: () => void; onRemediate: () => void; onLifecycle: (assetId: string, findingId: string, lifecycle: "ACKNOWLEDGED" | "EXCEPTED" | "OPEN") => void }) {
-  const [open, setOpen] = useState(false);
-  const humanStates: Array<"ACKNOWLEDGED" | "EXCEPTED" | "OPEN"> = ["ACKNOWLEDGED", "EXCEPTED", "OPEN"];
-  return (
-    <div className={cn("rounded-lg border p-3 text-sm", finding.status === "FAIL" ? "border-red-500/30 bg-red-500/[0.04]" : "border-amber-500/30 bg-amber-500/[0.04]")}>
-      <div className="flex flex-wrap items-center gap-2">
-        <SeverityBadge severity={finding.severity} />
-        <StatusBadge status={finding.status} />
-        <LifecycleBadge lifecycle={finding.lifecycle} />
-        <span className="font-mono text-[11px] text-accent">{finding.controlId}</span>
-        <span className="ml-auto text-[11px] text-slate-400">risk {finding.risk}/100</span>
-      </div>
-      <div className="mt-2 font-medium text-slate-100">{finding.controlName}</div>
-      <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{finding.why}</p>
-      {finding.riskExplanation ? (
-        <p className="text-[11px] text-slate-500 mt-1">{finding.riskExplanation.summary}</p>
-      ) : null}
-      <button onClick={() => setOpen((v) => !v)} className="mt-2 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500 hover:text-accent">
-        {open ? <ChevronDown className="w-3 h-3" aria-hidden="true" /> : <ChevronRight className="w-3 h-3" aria-hidden="true" />}
-        Why is this a finding?
-      </button>
-      {open ? (
-        <div className="mt-2 rounded-lg border border-surface-700 bg-surface-800/40 p-3 space-y-2 text-[11px]">
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-400">
-            <span>severity <span className="text-slate-200">{finding.severity}</span></span>
-            <span>status <span className="text-slate-200">{finding.status}</span></span>
-            {finding.controlId ? <span>control <span className="font-mono text-accent">{finding.controlId}</span></span> : null}
-          </div>
-          {finding.observedValue ? (
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-600">Observed</div>
-              <span className="font-mono break-all text-slate-300">{finding.observedValue}</span>
-            </div>
-          ) : null}
-          {finding.expectedValue ? (
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-600">Expected</div>
-              <span className="font-mono break-all text-slate-300">{finding.expectedValue}</span>
-            </div>
-          ) : null}
-          {finding.remediationGuidance ?? finding.recommendedFix ? (
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-600">Recommended fix</div>
-              <span className="text-slate-300">{finding.remediationGuidance ?? finding.recommendedFix}</span>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button onClick={onAnalyze} className="btn !py-1.5 text-xs inline-flex items-center gap-1.5">
-          <BrainCircuit className="w-3.5 h-3.5" aria-hidden="true" /> Analyze
-        </button>
-        <button onClick={onRemediate} className="btn-primary !py-1.5 text-xs inline-flex items-center gap-1.5">
-          <AlignLeft className="w-3.5 h-3.5" aria-hidden="true" /> Plan remediation
-        </button>
-        <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-600">
-          lifecycle
-          <select
-            value={finding.lifecycle ?? "OPEN"}
-            onChange={(e) => onLifecycle(assetId, finding.id, e.target.value as "ACKNOWLEDGED" | "EXCEPTED" | "OPEN")}
-            className="rounded-md border border-surface-700 bg-surface-800 px-2 py-1 text-[11px] font-mono text-slate-200 uppercase"
-          >
-            {humanStates.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-    </div>
-  );
-}
-
-function EvidenceRow({ record, detail, expanded, onToggle }: { record: EvidenceRecord; detail?: EvidenceWithVerification; expanded: boolean; onToggle: () => void }) {
-  const verified = detail ? detail.verification.verified : undefined;
-  return (
-    <div className="rounded-lg border border-surface-700 p-3 text-xs">
-      <button onClick={onToggle} className="w-full text-left flex flex-wrap items-center gap-2">
-        {expanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />}
-        <span className="font-mono text-accent">{record.controlId}</span>
-        <StatusBadge status={record.status} />
-        <span className="text-slate-500">{record.evidenceType}</span>
-        <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider">{verified ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> : <ShieldAlert className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />}{verified === undefined ? "sha256" : verified ? "integrity verified" : "integrity mismatch"}</span>
-        <span className="text-slate-500">{timeAgo(record.timestamp)}</span>
-      </button>
-      {expanded ? (
-        <div className="mt-2 grid sm:grid-cols-2 gap-2 text-slate-400">
-          <div><div className="text-[10px] uppercase tracking-wider text-slate-600">Observed</div><span className="font-mono break-all">{record.observedValue}</span></div>
-          <div><div className="text-[10px] uppercase tracking-wider text-slate-600">Expected</div><span className="font-mono break-all">{record.expectedValue}</span></div>
-        </div>
-      ) : null}
-      <div className="mt-2 space-y-1 text-[11px] text-slate-500">
-        <div className="font-mono">source: {record.source} · collector: {record.collector}</div>
-        <div className="font-mono">integrity sha256: {record.integrityHash} · confidence {Math.round(record.confidence * 100)}%</div>
-      </div>
-      {expanded && detail ? (
-        <div className="mt-2 rounded-lg border border-surface-700 bg-surface-800/40 p-3 space-y-1.5 text-[11px] font-mono text-slate-400">
-          <div className="text-[10px] uppercase tracking-wider text-slate-600">Recomputed SHA-256 integrity (canonical payload)</div>
-          <div>{detail.verification.canonical}</div>
-          <div className="flex flex-wrap gap-x-4 pt-1 text-slate-300">
-            <span>hash <span className="text-slate-200">{detail.verification.hash}</span></span>
-            <span className={verified ? "text-emerald-300" : "text-red-300"}>{verified ? "verified" : "mismatch"}</span>
-            <span>{detail.verification.verifiedAt.slice(0, 19).replace("T", " ")}</span>
-          </div>
-        </div>
-      ) : null}
-      <div className="mt-2 text-emerald-400/80 text-[10px] font-semibold uppercase tracking-wider">simulated evidence — normalized from the NEXUS-COMPLY test marketplace</div>
-    </div>
-  );
-}
-
-function ConnectorPanel({ profile, onTest, busy }: { profile?: AssetConnectorProfile; onTest: () => void; busy: boolean }) {
-  if (!profile) return null;
-  const c = profile.connector;
-  const ok = profile.online;
-  return (
-    <div className="card !p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <PlugZap className="w-4 h-4 text-accent" aria-hidden="true" />
-        <SectionTitle sub={ok ? "Connector ONLINE — scanning and remediation enabled" : "Connector unavailable — resolve connectivity to scan"}>Managing connector</SectionTitle>
-        <span className={cn("ml-auto px-2 py-0.5 rounded-md border text-[11px] font-semibold uppercase tracking-wide", ok ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-red-500/40 bg-red-500/10 text-red-300")}>
-          {ok ? "ONLINE" : "BLOCKED"}
-        </span>
-      </div>
-      {c ? (
-        <div className="mt-3 space-y-2 text-xs">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span className="font-semibold text-slate-100">{c.name}</span>
-            <span className="text-slate-500">v{c.version} · {c.vendor}</span>
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
-            <span>Transport <span className="font-mono text-slate-300">{c.transportType ?? "SIMULATED"}</span></span>
-            {c.protocol ? <span>Protocol <span className="font-mono text-slate-300">{c.protocol}</span></span> : null}
-            <span>Latency <span className="font-mono text-slate-300">{profile.latencyMs}ms</span></span>
-            {c.lastContactAt ? <span>last contact {timeAgo(c.lastContactAt)}</span> : null}
-          </div>
-          {profile.fromCapabilities.length > 0 ? (
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Declared capabilities</div>
-              <div className="flex flex-wrap gap-1">
-                {profile.fromCapabilities.map((cap) => (
-                  <span key={cap} className="px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-[10px] font-mono text-accent">{cap}</span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {c.connectError ? <div className="text-amber-300 text-[11px]">{c.connectError}</div> : null}
-        </div>
-      ) : (
-        <div className="mt-3 text-xs text-slate-500">No connector is deployed for this asset class — deploy and connect an adapter to scan.</div>
-      )}
-      <div className="mt-3 flex items-center gap-2">
-        <button onClick={onTest} disabled={busy} className="btn text-xs inline-flex items-center gap-1.5 !py-1.5">
-          <PlugZap className="w-3.5 h-3.5" aria-hidden="true" /> {busy ? "Testing…" : "Test connection"}
-        </button>
-        <span className="text-[10px] text-slate-600">simulated connector</span>
-      </div>
-    </div>
-  );
-}
-
-function ExceptionBadge({ status }: { status: GovernanceException["status"] }) {
-  const styles: Record<string, string> = {
-    REQUESTED: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-    APPROVED: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-    REJECTED: "border-red-500/40 bg-red-500/10 text-red-300",
-    EXPIRED: "border-slate-500/40 bg-slate-500/10 text-slate-400",
-  };
-  return <span className={cn("px-2 py-0.5 rounded-md border text-[10px] font-semibold uppercase tracking-wider", styles[status] ?? styles.REQUESTED)}>{status}</span>;
-}
+import { GovernanceExceptionBadge } from "../../components/assets/GovernanceExceptionBadge";
+import { EvidenceInspector } from "../../components/assets/EvidenceInspector";
+import { ConnectorHealthList } from "../../components/assets/ConnectorHealthList";
+import { RiskExplainCard } from "../../components/assets/RiskExplainCard";
 
 function GovernancePanel({ assetId, findingControls }: { assetId: string; findingControls: Array<{ controlId: string; controlName: string }> }) {
   const [evalState, setEvalState] = useState<{ policy: PolicySelection; applicableControls: ApplicableControlsResult; trace: GovernanceDecisionTrace; exceptions: GovernanceException[] } | null>(null);
@@ -352,7 +173,7 @@ function GovernancePanel({ assetId, findingControls }: { assetId: string; findin
             {assetExceptions.map((exc) => (
               <li key={exc.id} className="rounded-lg border border-surface-700 bg-surface-800/40 p-2.5 text-xs">
                 <div className="flex flex-wrap items-center gap-2">
-                  <ExceptionBadge status={exc.status} />
+                  <GovernanceExceptionBadge status={exc.status} />
                   <span className="font-mono text-accent">{exc.controlId}</span>
                   <span className="text-slate-500">requested by {exc.requestedBy}</span>
                   <span className="ml-auto text-[10px] text-slate-500">expires {new Date(exc.expiresAt).toLocaleDateString()}</span>
@@ -562,7 +383,7 @@ export default function AssetDetailPage() {
       </div>
 
       <section>
-        <ConnectorPanel profile={connectorProfile ?? undefined} onTest={testConnection} busy={busy} />
+        <ConnectorHealthList profile={connectorProfile ?? undefined} onTest={testConnection} busy={busy} />
       </section>
 
       <section>
@@ -595,7 +416,7 @@ export default function AssetDetailPage() {
           <SectionTitle sub={`From scan ${latest?.id ?? ""}`}>Findings ({findings.length})</SectionTitle>
           <div className="grid md:grid-cols-2 gap-3">
             {findings.map((f) => (
-              <FindingRow key={f.id} finding={f} assetId={id} onAnalyze={() => analyze(f.id)} onRemediate={() => remediate(f.id)} onLifecycle={setLifecycle} />
+              <RiskExplainCard key={f.id} finding={f} assetId={id} onAnalyze={() => analyze(f.id)} onRemediate={() => remediate(f.id)} onLifecycle={setLifecycle} />
             ))}
           </div>
         </section>
@@ -606,7 +427,7 @@ export default function AssetDetailPage() {
           <SectionTitle sub="Normalized, SHA-256 integrity-hashed machine evidence — expand to re-verify">Evidence ({evidence.length})</SectionTitle>
           <div className="grid md:grid-cols-2 gap-3">
             {evidence.map((e) => (
-              <EvidenceRow key={e.id} record={e} detail={verifiedDetails[e.id]} expanded={!!expanded[e.id]} onToggle={() => toggleEvidence(e.id)} />
+              <EvidenceInspector key={e.id} record={e} detail={verifiedDetails[e.id]} expanded={!!expanded[e.id]} onToggle={() => toggleEvidence(e.id)} />
             ))}
           </div>
         </section>

@@ -5,7 +5,6 @@ import type { AuditRecord, DashboardStats, GovernanceDashboardStats, GovernanceE
 import { api, describeApiError } from "../services/api";
 import { PageHeader } from "../components/PageHeader";
 import { MetricCard } from "../components/MetricCard";
-import { ComplianceRing, ComplianceBar } from "../components/ComplianceRing";
 import { SeverityBadge } from "../components/SeverityBadge";
 import { VendorCard } from "../components/VendorCard";
 import { FrameworkCard } from "../components/FrameworkCard";
@@ -22,6 +21,8 @@ import { RiskGauge } from "../components/RiskGauge";
 import { cn, timeAgo } from "../utils/cn";
 import { buildInsights, categoryBreakdown, computeVendors, frameworkStats, GUIDANCE_FRAMEWORKS, KPI_INSIGHTS } from "../demo/dashboard";
 import { VENDOR_META } from "../demo/dashboard";
+import { PostureCards } from "../components/assets/PostureCards";
+import { GlobalPosturePanel } from "../components/assets/GlobalPosturePanel";
 
 const SEV_WEIGHTS: Record<string, number> = { CRITICAL: 95, HIGH: 75, MEDIUM: 55, LOW: 30, INFO: 5 };
 
@@ -409,60 +410,7 @@ export default function DashboardPage() {
               <h2 className="text-base font-semibold text-slate-100">Regional & framework posture</h2>
               <Link to="/app/enterprise/governance" className="text-xs text-accent hover:underline">Open enterprise governance →</Link>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="card !p-4">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">By region</div>
-                <div className="space-y-3">
-                  {posturalRegions.map((r) => {
-                    const total = r.passed + r.failed + r.warnings;
-                    const ratio = total ? (r.passed / total) * 100 : 0;
-                    return (
-                      <div key={r.region}>
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-slate-300">{r.regionLabel} <span className="text-slate-600">· {r.assetCount} assets</span></span>
-                          <span className="font-mono text-slate-300">{r.score}% <span className="text-slate-600">({r.passed} passed · {r.failed} failed)</span></span>
-                        </div>
-                        <div className="h-1.5 w-full rounded-full bg-surface-800 overflow-hidden">
-                          <div className="h-full rounded-full bg-emerald-400/80 transition-all duration-700" style={{ width: `${Math.max(0, Math.min(100, ratio))}%` }} />
-                        </div>
-                        {r.findings > 0 ? <div className="text-[10px] text-amber-300/90 mt-0.5">{r.findings} open findings</div> : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="card !p-4">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">By framework</div>
-                <div className="space-y-3">
-                  {posturalFrameworks.map((f) => (
-                    <div key={f.framework}>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-slate-300">{f.label}</span>
-                        <span className="inline-flex items-center gap-2">
-                          <span className="font-mono text-slate-400">{f.score}% · {f.passed}/{f.totalControls}</span>
-                          <span className={cn(
-                            "px-1.5 py-0.5 rounded border text-[10px] font-semibold uppercase tracking-wider",
-                            f.status === "COMPLIANT"
-                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                              : f.status === "PARTIAL"
-                                ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-                                : f.status === "AT_RISK"
-                                  ? "border-red-500/40 bg-red-500/10 text-red-300"
-                                  : "border-slate-500/40 bg-slate-500/10 text-slate-400"
-                          )}>{f.status.replace("_", " ")}</span>
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-surface-800 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-700"
-                          style={{ width: `${Math.max(0, Math.min(100, f.score))}%`, backgroundColor: f.status === "AT_RISK" ? "#ef4444" : f.status === "PARTIAL" ? "#f59e0b" : f.status === "COMPLIANT" ? "#34d399" : "#64748b" }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <PostureCards byRegion={posturalRegions} byFramework={posturalFrameworks} showOpenFindings />
           </div>
         </Reveal>
       ) : null}
@@ -532,38 +480,14 @@ export default function DashboardPage() {
       {/* Compliance + vendors + risk */}
       <Reveal delay={160}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <GlassCard className="!p-5">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-base font-semibold text-slate-100">Compliance posture</h2>
-            <SeverityBadge severity={stats.compliance.score >= 85 ? "LOW" : stats.compliance.score >= 70 ? "MEDIUM" : "HIGH"} label="risk level" />
-          </div>
-          {/* AI assessment is kept separate from human-verified compliance — they are different numbers. */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col items-center rounded-xl border border-sky-500/20 bg-sky-500/5 px-2 py-4" title={`AI engine score ${stats.review.aiScore}% · ${stats.compliance.failed} failed of ${stats.compliance.passed + stats.compliance.failed} evaluated`}>
-              <ComplianceRing value={stats.compliance.score} size={132} stroke={11} sublabel="AI ASSESSMENT" />
-            </div>
-            <div className="flex flex-col items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-2 py-4" title={`${stats.review.humanVerifiedCoverage}% of findings human-verified · pending findings are excluded until reviewed`}>
-              <ComplianceRing value={stats.review.humanVerifiedScore} size={132} stroke={11} sublabel="HUMAN VERIFIED" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center justify-center gap-2">
-            <span className={cn("chip border", stats.review.pending > 0 ? "border-amber-500/40 bg-status-warn-soft text-amber-300" : "border-emerald-500/40 bg-status-ok-soft text-emerald-300")}>
-              {stats.review.pending > 0 ? (
-                <><span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse-dot" aria-hidden="true" /> PENDING REVIEW · {stats.review.pending}</>
-              ) : (
-                <>✓ ALL FINDINGS VERIFIED</>
-              )}
-            </span>
-          </div>
-          <div className="mt-5 space-y-3.5">
-            {categories.map((c) => (
-              <ComplianceBar key={c.id} label={c.label} value={c.score} hint={c.total ? `${c.total} ctrl` : undefined} />
-            ))}
-          </div>
-          <p className="mt-4 text-[11px] text-slate-600 leading-relaxed">
-            The AI assessment reflects raw control pass-rate weighted against live findings. The human-verified score only counts findings a reviewer has approved, rejected or resolved.
-          </p>
-        </GlassCard>
+        <GlobalPosturePanel
+          compliance={stats.compliance}
+          aiScore={stats.review.aiScore}
+          humanVerifiedScore={stats.review.humanVerifiedScore}
+          pending={stats.review.pending}
+          humanVerifiedCoverage={stats.review.humanVerifiedCoverage}
+          categories={categories}
+        />
 
         <GlassCard className="!p-5">
           <div className="flex items-center justify-between mb-4">
