@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Cable, PlugZap, RefreshCw } from "lucide-react";
 import type { ConnectorRecord } from "@nexus/shared-types";
+import { connectorModeFor } from "@nexus/enterprise-catalog";
 import { api } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { PageHeader } from "../../components/PageHeader";
@@ -16,7 +17,13 @@ const STATUS_STYLE: Record<string, string> = {
   NETWORK_BLOCKED: "border-red-500/40 bg-red-500/10 text-red-300",
 };
 
+const MODE_STYLE: Record<string, string> = {
+  SIMULATED: "text-emerald-400",
+  PRODUCTION: "text-amber-300",
+};
+
 function ConnectorCard({ connector, onTest, busy }: { connector: ConnectorRecord; onTest: (id: string) => void; busy: boolean }) {
+  const mode = connectorModeFor(connector);
   return (
     <div className="card !p-4">
       <div className="flex items-start gap-3">
@@ -67,7 +74,7 @@ function ConnectorCard({ connector, onTest, busy }: { connector: ConnectorRecord
         <button onClick={() => onTest(connector.id)} disabled={busy} className="btn text-xs inline-flex items-center gap-1.5 !py-1.5">
           <PlugZap className="w-3.5 h-3.5" aria-hidden="true" /> Test connection
         </button>
-        <span className="text-[10px] text-slate-600">simulated connector</span>
+        <span className="text-[10px] text-slate-600">mode <span className={cn("font-mono font-semibold uppercase", MODE_STYLE[mode])}>{mode}</span> · production execution denied (allowlist empty)</span>
       </div>
     </div>
   );
@@ -149,6 +156,7 @@ export default function ConnectorsPage() {
         <div className="flex flex-wrap gap-4 text-[11px] text-slate-400">
           <span className="inline-flex items-center gap-1.5"><StatusBadge status="PASS" /> ONLINE — can scan and execute remediations</span>
           <span className="inline-flex items-center gap-1.5"><StatusBadge status="FAIL" /> OFFLINE / AUTH_FAILED / NETWORK_BLOCKED — blocked</span>
+          <span className="inline-flex items-center gap-1.5"><span className={cn("font-mono font-semibold uppercase", MODE_STYLE.SIMULATED)}>SIMULATED</span> — executes against the controlled demo environment; production adapters are denied by the policy gate until enabled and allowlisted</span>
         </div>
       </section>
     </div>

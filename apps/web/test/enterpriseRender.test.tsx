@@ -189,6 +189,10 @@ describe("ConnectorsPage — PHASE 2 transport/protocol/capabilities chips (jsdo
     for (const expected of ["AGENT", "WINRM", "CLOUD_API", "SECURITY_HEADERS", "FIREWALL_RULES"] as const) {
       expect(text).toContain(expected);
     }
+    const modeChips = [...container.querySelectorAll(".card")].filter((c) => c.textContent?.includes("mode SIMULATED"));
+    expect(modeChips.length).toBe(17);
+    expect(text).toContain("production execution denied (allowlist empty)");
+    expect(text).toContain("denied by the policy gate until enabled and allowlisted");
     act(() => root.unmount());
   });
 
