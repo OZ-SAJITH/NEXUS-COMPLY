@@ -1,17 +1,32 @@
 import type {
   AssetFinding,
   AssetRecord,
+  AiProviderMode,
   RemediationActionType,
   RemediationApprovalRecord,
   RemediationExecutionLogEntry,
+  RemediationPlanVersion,
   RemediationRecord,
   RemediationValidationResult,
   UserRole,
 } from "@nexus/shared-types";
-import { applyRemediationAction, authorizeConnectorAction, buildProposal, canTransition } from "@nexus/enterprise-catalog";
+import {
+  applyRemediationAction,
+  authorizeConnectorAction,
+  buildProposal,
+  buildRemediationIntelligence,
+  canTransition,
+  defaultActionForControl,
+  liveRemediationOverrides,
+  validateAiRemediationPlanShape,
+  verifyEvidenceRecord,
+  type IntelligenceEvidenceInput,
+  type LiveRemediationOverrides,
+  type RemediationIntelligenceInput,
+} from "@nexus/enterprise-catalog";
 import { ApiError } from "../reviewService";
 import { uniqueId } from "../../utils/helpers";
-import { findAssetFinding, scanAsset, applyFindingLifecycle, type Instantiation, reevaluateControl } from "./assetService";
+import { findAssetFinding, scanAsset, applyFindingLifecycle, findingRiskContext, type Instantiation, reevaluateControl } from "./assetService";
 import type { ConnectorManager } from "./connectorManager";
 import { logEnterpriseEvent, simulatedDelay } from "./events";
 
@@ -464,3 +479,245 @@ export function approvedActionTypes(asset: AssetRecord): RemediationActionType[]
 }
 
 export type { ConnectorManager, Instantiation };
+
+// ---------------------------------------------------------------------------
+// PHASE 6 — AI remediation intelligence.
+// Evidence-grounded structured plan that feeds the existing remediation closed
+// loop (validate → approve → execute → verify → rollback). The AI never
+// executes changes and never bypasses the human approval workflow.
+// ---------------------------------------------------------------------------
+
+/**
+ * System prompt safety contract (PHASE 6 spec §29). Passed verbatim to a live
+ * AI provider together with a structured, evidence-only context.
+ */
+export const REMEDIATION_SYSTEM_PROMPT = [
+  "You are a security remediation planning assistant for a compliance platform.",
+  "Never invent evidence.",
+  "Never invent credentials.",
+  "Never claim a remediation was executed unless the execution service returned a verified result.",
+  "Never bypass human approval.",
+  "Never recommend unsafe arbitrary execution.",
+  "If required information for a recommendation is missing, say so.",
+].join("\n");
+
+function approvalStatusOf(rem: RemediationRecord): RemediationPlanVersion["approvalStatus"] {
+  switch (rem.status) {
+    case "PENDING_APPROVAL":
+      return "PENDING_APPROVAL";
+    case "APPROVED":
+      return "APPROVED";
+    case "REJECTED":
+      return "REJECTED";
+    default:
+      return "NONE";
+  }
+}
+
+function executionStatusOf(rem: RemediationRecord): RemediationPlanVersion["executionStatus"] {
+  switch (rem.status) {
+    case "EXECUTING":
+    case "VERIFYING":
+      return "EXECUTING";
+    case "COMPLETED":
+    case "VERIFIED":
+      return "EXECUTED";
+    case "FAILED":
+      return "FAILED";
+    case "ROLLING_BACK":
+    case "ROLLED_BACK":
+      return "ROLLED_BACK";
+    default:
+      return "NOT_EXECUTED";
+  }
+}
+
+/**
+ * POST /findings/:id/remediation/analyze — deterministic, evidence-grounded
+ * remediation intelligence. When AI_PROVIDER=live the service tries the Python
+ * AI worker; on any failure it falls back to the deterministic baseline, which
+ * is labeled "Baseline remediation guidance" and never pretends to be AI.
+ */
+export async function analyzeRemediationIntelligence(ctx: Instantiation, findingId: string, actor: Actor): Promise<RemediationRecord> {
+  await ctx.manager.ensureSeeded();
+  const { finding, asset } = await findAssetFinding(ctx, findingId);
+
+  const evidenceRows = await ctx.repo.evidenceForFinding(findingId);
+  const evidenceRowsEffective = evidenceRows.length === 0 ? await ctx.repo.evidenceForAsset(asset.id) : evidenceRows;
+  const evidence: IntelligenceEvidenceInput[] = evidenceRowsEffective.map((e) => ({
+    ...e,
+    verification: verifyEvidenceRecord(e),
+  }));
+
+  const riskContext = await findingRiskContext(ctx, findingId);
+  const connector = await ctx.manager.bestConnectorFor(asset.assetType, asset.vendor);
+  const proposal = buildProposal(finding.controlId, asset.assetType, "");
+  const actionType = defaultActionForControl(finding.controlId) ?? proposal.actionType;
+
+  const providerMode: AiProviderMode = process.env.AI_PROVIDER === "live" ? "live" : "mock";
+  let overrides: LiveRemediationOverrides | null = null;
+  if (providerMode === "live") {
+    overrides = await tryLiveRemediation({ finding, asset, evidence, riskContext, connector, actionType });
+  }
+
+  const existing = (await ctx.repo.allRemediations())
+    .filter((r) => r.findingId === findingId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const latest = existing[0];
+  const base = latest ? Math.max(latest.intelligence?.version ?? 0, latest.planVersions?.length ?? 0) : 0;
+  const version = base + 1;
+  const id = uniqueId("int");
+
+  const input: RemediationIntelligenceInput = {
+    finding,
+    asset,
+    allAssets: await ctx.repo.allAssets(),
+    evidence,
+    riskContext,
+    governanceContext: finding.governanceContext,
+    connector,
+    actionType,
+    id,
+    version,
+    createdBy: actor.name,
+    provider: providerMode,
+    ...(overrides ?? {}),
+  };
+
+  const intelligence = buildRemediationIntelligence(input);
+  const shape = validateAiRemediationPlanShape(intelligence);
+  if (!shape.ok) {
+    throw new ApiError(500, `AI remediation intelligence failed structural validation: ${shape.errors.join("; ")}`);
+  }
+
+  const rem = latest ?? (await createRemediation(ctx, findingId, intelligence.summary));
+  rem.intelligence = intelligence;
+  rem.reason = intelligence.summary;
+  rem.planVersions = [
+    ...(rem.planVersions ?? []),
+    {
+      version,
+      intelligenceId: intelligence.id,
+      createdAt: intelligence.createdAt,
+      source: intelligence.source,
+      provider: intelligence.provider,
+      model: intelligence.model,
+      changeRisk: intelligence.changeRisk,
+      actionType: intelligence.recommendedActions[0]?.actionType ?? rem.proposedAction.actionType,
+      approvalStatus: approvalStatusOf(rem),
+      executionStatus: executionStatusOf(rem),
+    },
+  ].slice(-20);
+
+  await _saveAndLogForIntelligence(ctx, rem, finding, asset, actor, intelligence);
+
+  return rem;
+}
+
+async function tryLiveRemediation(input: {
+  finding: AssetFinding;
+  asset: AssetRecord;
+  evidence: IntelligenceEvidenceInput[];
+  riskContext: { riskScore: number; riskLevel: string; exposure: string; impactScore: number; blastRadius: { affectedAssetCount: number; criticalAssetsAffected: number; servicesAffected: number; regionsAffected: string[]; crossRegion: boolean } };
+  connector?: { name?: string; transportType?: string; protocol?: string; capabilities?: string[]; authorizedActions?: RemediationActionType[] };
+  actionType: RemediationActionType;
+}): Promise<LiveRemediationOverrides | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(`${process.env.AI_SERVICE_URL ?? "http://localhost:8000"}/api/ai/remediation-plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        systemPrompt: REMEDIATION_SYSTEM_PROMPT,
+        finding: {
+          id: input.finding.id,
+          controlId: input.finding.controlId,
+          title: input.finding.what,
+          reason: input.finding.why,
+          severity: input.finding.severity,
+          riskScore: input.finding.risk,
+          observedValue: input.finding.observedValue ?? null,
+          expectedValue: input.finding.expectedValue ?? null,
+        },
+        asset: {
+          id: input.asset.id,
+          name: input.asset.name,
+          type: input.asset.assetType,
+          vendor: input.asset.vendor,
+          environment: input.asset.environment,
+          criticality: input.asset.criticality,
+        },
+        evidence: input.evidence.map((e) => ({
+          evidenceType: e.evidenceType,
+          observedValue: e.observedValue,
+          expectedValue: e.expectedValue,
+          source: e.source,
+          verified: Boolean(e.verification?.verified),
+        })),
+        riskContext: {
+          riskScore: input.riskContext.riskScore,
+          riskLevel: input.riskContext.riskLevel,
+          exposure: input.riskContext.exposure,
+          impactScore: input.riskContext.impactScore,
+          blastRadius: input.riskContext.blastRadius,
+        },
+        connector: input.connector
+          ? {
+              name: input.connector.name ?? null,
+              transportType: input.connector.transportType ?? null,
+              protocol: input.connector.protocol ?? null,
+              capabilities: input.connector.capabilities ?? [],
+              authorizedActions: input.connector.authorizedActions ?? [],
+            }
+          : null,
+        expectedActionType: input.actionType,
+        requiredOutput: "RemediationPlan",
+      }),
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json()) as Record<string, unknown>;
+      return liveRemediationOverrides(data);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function _saveAndLogForIntelligence(ctx: Instantiation, rem: RemediationRecord, finding: AssetFinding, asset: AssetRecord, actor: Actor, intelligence: RemediationRecord["intelligence"]): Promise<void> {
+  rem.updatedAt = new Date().toISOString();
+  await ctx.repo.saveRemediation(rem);
+  if (rem.auditEventIds.length >= 100) rem.auditEventIds = rem.auditEventIds.slice(-50);
+  await logEnterpriseEvent({
+    eventType: "AI_REMEDIATION_INTELLIGENCE_GENERATED",
+    entityType: "remediation",
+    entityId: rem.id,
+    findingId: finding.id,
+    auditId: asset.id,
+    controlId: finding.controlId,
+    actorId: actor.id,
+    actorName: actor.name,
+    actorRole: actor.role,
+    source: "ai",
+    detail: {
+      intelligenceId: intelligence?.id ?? null,
+      version: intelligence?.version ?? null,
+      source: intelligence?.source ?? null,
+      provider: intelligence?.provider ?? null,
+      changeRisk: intelligence?.changeRisk ?? null,
+      evidenceUsed: intelligence?.evidenceUsed.length ?? 0,
+      evidenceVerified: intelligence?.evidenceUsed.filter((e) => e.verified).length ?? 0,
+      confidence: intelligence?.confidence ?? null,
+      requiresApproval: intelligence?.requiresApproval ?? true,
+      actionTypes: intelligence?.recommendedActions.map((a) => a.actionType) ?? [],
+    },
+  });
+}
+
+export async function listFindingRemediations(ctx: Instantiation, findingId: string): Promise<RemediationRecord[]> {
+  const all = await ctx.repo.allRemediations();
+  return all.filter((r) => r.findingId === findingId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}

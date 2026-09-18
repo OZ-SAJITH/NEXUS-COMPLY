@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlignLeft, BrainCircuit, ChevronDown, ChevronRight, Crosshair } from "lucide-react";
+import { AlignLeft, BrainCircuit, ChevronDown, ChevronRight, Crosshair, Sparkles } from "lucide-react";
 import type { AssetFinding, FindingRiskContext } from "@nexus/shared-types";
 import { SeverityBadge, StatusBadge } from "../ui";
 import { cn } from "../../utils/cn";
@@ -26,6 +26,7 @@ export function RiskExplainCard({
   assetId,
   onAnalyze,
   onRemediate,
+  onRemediationIntelligence,
   onLifecycle,
   context,
 }: {
@@ -33,6 +34,7 @@ export function RiskExplainCard({
   assetId: string;
   onAnalyze: () => void;
   onRemediate: () => void;
+  onRemediationIntelligence?: () => void;
   onLifecycle: (assetId: string, findingId: string, lifecycle: "ACKNOWLEDGED" | "EXCEPTED" | "OPEN") => void;
   context?: FindingRiskContext;
 }) {
@@ -105,6 +107,11 @@ export function RiskExplainCard({
         <button onClick={onRemediate} className="btn-primary !py-1.5 text-xs inline-flex items-center gap-1.5">
           <AlignLeft className="w-3.5 h-3.5" aria-hidden="true" /> Plan remediation
         </button>
+        {onRemediationIntelligence ? (
+          <button onClick={onRemediationIntelligence} className="btn !py-1.5 text-xs inline-flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" /> AI remediation plan
+          </button>
+        ) : null}
         <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-600">
           lifecycle
           <select

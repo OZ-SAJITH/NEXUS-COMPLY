@@ -383,6 +383,7 @@ export type AuditEventType =
   | "REMEDIATION_VERIFICATION_PASSED"
   | "REMEDIATION_VERIFICATION_FAILED"
   | "REMEDIATION_ROLLED_BACK"
+  | "AI_REMEDIATION_INTELLIGENCE_GENERATED"
   | "FINDING_LIFECYCLE_CHANGED"
   | "CONNECTOR_STATUS_CHANGED"
   | "GOVERNANCE_EXCEPTION_REQUESTED"
@@ -1601,6 +1602,10 @@ export interface RemediationRecord {
   execution?: RemediationExecutionResult;
   verification?: RemediationVerificationResult;
   rollback?: RemediationRollbackResult;
+  /** PHASE 6: AI remediation intelligence attached to this remediation. */
+  intelligence?: AiRemediationIntelligence;
+  /** PHASE 6: append-only plan version history (regeneration never overwrites). */
+  planVersions?: RemediationPlanVersion[];
   auditEventIds: string[];
   createdAt: string;
   updatedAt?: string;
@@ -1638,6 +1643,121 @@ export interface FindingAnalysis {
     notes: string;
   };
   generatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 6 — AI remediation intelligence engine.
+// Every field is evidence-grounded and structurally validated. The AI never
+// executes changes and never short-circuits the human approval workflow.
+// ---------------------------------------------------------------------------
+
+/**
+ * Change risk classifies the *change* itself (blast radius of the action),
+ * independently of how severe the underlying finding is.
+ */
+export type ChangeRisk = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | "REVIEW_REQUIRED";
+
+/** Where the intelligence came from: live AI provider, deterministic engine, or explicit baseline guidance. */
+export type RemediationIntelligenceSource = "ai" | "deterministic" | "baseline";
+
+export interface RemediationEvidenceUsed {
+  evidenceId: string;
+  controlId: string;
+  evidenceType: string;
+  /** Observed value the scanner actually reported. */
+  observedValue: string;
+  /** Expected/baseline value the rule compared against. */
+  expectedValue: string;
+  source: string;
+  verified: boolean;
+  hash: string;
+}
+
+export interface RemediationIntelligenceAction {
+  /** Human-readable instruction ("Disable TLS 1.0 / TLS 1.1"). */
+  action: string;
+  /** Structured action type from the existing remediation catalogue. */
+  actionType: RemediationActionType;
+  target: string;
+  configArea: string;
+  /** Post-change expected configuration state. */
+  expectedState: string;
+  reason: string;
+  changeRisk: ChangeRisk;
+  /** Infrastructure changes always require a human approval. */
+  requiresApproval: true;
+}
+
+export interface AiRemediationPreCheck {
+  id: string;
+  check: string;
+  rationale: string;
+}
+
+export interface AiRemediationValidationStep {
+  phase: "BEFORE" | "CHANGE" | "AFTER";
+  step: string;
+  expectedEvidence?: string;
+  expectedControl?: string;
+}
+
+export interface AiRemediationRollbackStep {
+  step: string;
+}
+
+export interface AiRemediationIntelligence {
+  id: string;
+  findingId: string;
+  assetId: string;
+  assetName: string;
+  controlId: string;
+  /** Monotonic plan version; regenerating a plan never overwrites history. */
+  version: number;
+  summary: string;
+  rootCause: string;
+  /** EVIDENCE_GROUNDED, or INSUFFICIENT_EVIDENCE when root cause is not determinable. */
+  rootCauseCertainty: "EVIDENCE_GROUNDED" | "INSUFFICIENT_EVIDENCE";
+  evidenceUsed: RemediationEvidenceUsed[];
+  recommendedActions: RemediationIntelligenceAction[];
+  preChecks: AiRemediationPreCheck[];
+  changeRisk: ChangeRisk;
+  changeRiskReason: string;
+  /** Potential impact, expressed from blast radius — never confirmed impact. */
+  potentialImpact: string;
+  blastRadius: FindingBlastRadius;
+  validationSteps: AiRemediationValidationStep[];
+  rollbackSteps: AiRemediationRollbackStep[];
+  rollbackStatus: "AVAILABLE" | "ROLLBACK_REVIEW_REQUIRED";
+  expectedResult: string;
+  /** 0–1, reflects available evidence quality (never gate for approval). */
+  confidence: number;
+  /** Always true: the AI never bypasses the human approval workflow. */
+  requiresApproval: true;
+  /** What the authorized connector actually supports (vendor-aware). */
+  connectorCapabilities: string[];
+  /** Explicit list of information the engine could not ground in evidence. */
+  unavailable: string[];
+  source: RemediationIntelligenceSource;
+  provider: AiProviderMode;
+  model?: string;
+  disclaimer: string;
+  /** Evidence → control → risk → impact → action reasoning chain. */
+  whyThisRemediation: string[];
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface RemediationPlanVersion {
+  version: number;
+  intelligenceId: string;
+  createdAt: string;
+  source: RemediationIntelligenceSource;
+  provider: AiProviderMode;
+  model?: string;
+  changeRisk: ChangeRisk;
+  actionType: RemediationActionType;
+  approvalStatus: "NONE" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  executionStatus: "NOT_EXECUTED" | "EXECUTING" | "EXECUTED" | "FAILED" | "ROLLED_BACK";
 }
 
 // ---------------------------------------------------------------------------

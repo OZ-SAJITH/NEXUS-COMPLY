@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { CheckCircle2, ChevronDown, Play, RotateCcw, ShieldCheck, ShieldX, ThumbsUp, Undo2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, Play, RotateCcw, ShieldCheck, ShieldX, Sparkles, ThumbsUp, Undo2 } from "lucide-react";
 import type { RemediationRecord } from "@nexus/shared-types";
 import { api } from "../../services/api";
 import { RemediationStatusBadge } from "../../pages/enterprise/EnterpriseTabs";
 import { RiskBandPill } from "../gov/RiskBandPill";
+import { AiRemediationIntelligencePanel } from "./AiRemediationIntelligencePanel";
 import { cn, formatDate } from "../../utils/cn";
 
 interface WorkflowProps {
@@ -19,6 +20,11 @@ function WorkflowButtons({ rem, busy, onAction }: WorkflowProps) {
       {s === "PLANNED" || s === "VALIDATION_FAILED" ? (
         <button onClick={() => onAction(() => api.enterprise.validateRemediation(rem.id), "Validation")} disabled={busy} className="btn text-xs inline-flex items-center gap-1.5 !py-1.5">
           <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Validate in sandbox
+        </button>
+      ) : null}
+      {s === "PLANNED" || s === "VALIDATION_FAILED" ? (
+        <button onClick={() => onAction(() => api.enterprise.remediationIntelligence(rem.findingId), "AI remediation intelligence")} disabled={busy} className="btn text-xs inline-flex items-center gap-1.5 !py-1.5">
+          <Sparkles className="w-3.5 h-3.5" aria-hidden="true" /> {rem.intelligence ? "Regenerate AI plan" : "Generate AI plan"}
         </button>
       ) : null}
       {s === "VALIDATED" ? (
@@ -105,6 +111,8 @@ export function RemediationWorkflow({
           <DetailRow label="Proposal" value={rem.proposedAction.displayName} />
           <DetailRow label="Expected result" value={rem.proposedAction.expectedResult} />
           <DetailRow label="Parameters" value={<code className="font-mono text-[11px]">{JSON.stringify(rem.proposedAction.parameters)}</code>} />
+
+          {rem.intelligence ? <AiRemediationIntelligencePanel intelligence={rem.intelligence} /> : null}
 
           {rem.validation ? (
             <div className="rounded-lg border border-surface-700 p-3 text-xs">

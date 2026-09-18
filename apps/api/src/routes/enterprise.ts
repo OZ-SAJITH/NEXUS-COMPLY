@@ -37,9 +37,11 @@ import {
 } from "../services/enterprise/governanceService";
 import { analyzeFinding } from "../services/enterprise/aiAnalysisService";
 import {
+  analyzeRemediationIntelligence,
   approveRemediation,
   createRemediation,
   executeRemediation,
+  listFindingRemediations,
   rejectRemediation,
   requestApproval,
   rollbackRemediation,
@@ -451,6 +453,44 @@ enterpriseRouter.get("/remediations/:id", async (req, res) => {
   const repo = getRepository();
   const rem = await repo.getRemediation(req.params.id);
   if (!rem) return handleError(res, "Remediation not found", 404);
+  res.json(rem);
+});
+
+// ---------------------------------------------------------------------------
+// Phase 6 — AI remediation intelligence endpoints.
+// These are thin contracts over the same remediation workflow — the AI never
+// executes changes and never bypasses the existing approval loop.
+// ---------------------------------------------------------------------------
+
+enterpriseRouter.post("/findings/:id/remediation/analyze", async (req, res, next) => {
+  try {
+    const repo = getRepository();
+    const manager = new ConnectorManager(repo);
+    const rem = await analyzeRemediationIntelligence({ repo, manager }, req.params.id, reviewerActor());
+    res.json(rem);
+  } catch (e) {
+    next(e);
+  }
+});
+
+enterpriseRouter.get("/findings/:id/remediation", async (req, res) => {
+  const repo = getRepository();
+  const manager = new ConnectorManager(repo);
+  const list = await listFindingRemediations({ repo, manager }, req.params.id);
+  res.json(list);
+});
+
+enterpriseRouter.get("/remediation/:id", async (req, res) => {
+  const repo = getRepository();
+  const rem = await repo.getRemediation(req.params.id);
+  if (!rem) return handleError(res, "Remediation not found", 404);
+  res.json(rem);
+});
+
+enterpriseRouter.post("/remediation/:id/validate-plan", async (req, res) => {
+  const repo = getRepository();
+  const manager = new ConnectorManager(repo);
+  const rem = await validateRemediation({ repo, manager }, req.params.id, reviewerActor());
   res.json(rem);
 });
 

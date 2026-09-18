@@ -11,6 +11,8 @@ import EnterpriseAuditPage from "../src/pages/enterprise/EnterpriseAuditPage";
 import AssetsPage from "../src/pages/enterprise/AssetsPage";
 import { AssetCard } from "../src/components/assets/AssetCard";
 import { AssetStatusChip } from "../src/components/assets/AssetStatusChip";
+import { AiRemediationIntelligencePanel } from "../src/components/assets/AiRemediationIntelligencePanel";
+import RemediationsPage from "../src/pages/enterprise/RemediationsPage";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -438,5 +440,67 @@ describe("EnterpriseAuditPage — PHASE 4 governance events audited (jsdom rende
     expect(text).toContain("Enterprise Audit Trail");
     expect(text).toContain("GOVERNANCE EXCEPTION REQUESTED");
     expect(text).toContain(`governance:${created.id}`);
+  });
+});
+
+describe("PHASE 6 — AI remediation intelligence panel (jsdom render probe)", () => {
+  beforeAll(async () => {
+    await enterpriseDemo.scan(HERO, "manual");
+    const findings = enterpriseDemo.assetFindings(HERO);
+    const tls = findings.find((f) => f.controlId === "TLS-001") ?? findings[0];
+    enterpriseDemo.remediationIntelligence(tls.id);
+  });
+
+  it("renders all intelligence sections with baseline label and change-risk pill", async () => {
+    const rems = enterpriseDemo.remediations();
+    const rem = rems.find((r) => r.intelligence != null)!;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(<AiRemediationIntelligencePanel intelligence={rem.intelligence!} />);
+    });
+    const text = container.textContent ?? "";
+    act(() => root.unmount());
+    expect(text).toContain("AI Remediation Intelligence");
+    expect(text).toContain(`v${rem.intelligence!.version}`);
+    expect(text).toContain("Baseline remediation guidance");
+    expect(text).toContain("Root cause");
+    expect(text).toContain("Evidence used");
+    expect(text).toContain("Recommended actions");
+    expect(text).toContain("Pre-checks");
+    expect(text).toContain("Potential impact / blast radius");
+    expect(text).toContain("Validation plan");
+    expect(text).toContain("Rollback plan");
+    expect(text).toContain("Expected result");
+    expect(text).toContain("Change risk");
+    expect(text).toContain("approval required");
+    expect(text).toContain("confidence");
+  });
+
+  it("RemediationsPage shows the generate button and renders the inline intelligence panel", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/app/enterprise/remediation"]}>
+          <Routes>
+            <Route path="/app/enterprise/remediation" element={<RemediationsPage />} />
+          </Routes>
+        </MemoryRouter>
+      );
+    });
+    await flush();
+    let text = container.textContent ?? "";
+    expect(text).toContain("Regenerate AI plan");
+    const headerButton = [...container.querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("SET_TLS_MIN_VERSION"));
+    expect(headerButton).toBeDefined();
+    await act(async () => headerButton!.click());
+    await flush();
+    text = container.textContent ?? "";
+    expect(text).toContain("AI Remediation Intelligence");
+    expect(text).toContain("Baseline remediation guidance");
+    act(() => root.unmount());
   });
 });

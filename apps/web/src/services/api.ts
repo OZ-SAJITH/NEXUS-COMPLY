@@ -350,6 +350,11 @@ export const api = {
     analyzeFinding: (findingId: string) => request<FindingAnalysis>(`/findings/${findingId}/analyze`, { method: "POST", body: JSON.stringify({}) }),
     remediations: () => request<RemediationRecord[]>("/remediations"),
     remediation: (id: string) => request<RemediationRecord>(`/remediations/${id}`),
+    remediationIntelligence: (findingId: string) =>
+      request<RemediationRecord>(`/findings/${findingId}/remediation/analyze`, { method: "POST", body: JSON.stringify({}) }),
+    findingRemediations: (findingId: string) => request<RemediationRecord[]>(`/findings/${findingId}/remediation`),
+    planById: (id: string) => request<RemediationRecord>(`/remediation/${id}`),
+    validatePlan: (id: string) => request<RemediationRecord>(`/remediation/${id}/validate-plan`, { method: "POST", body: JSON.stringify({}) }),
     createRemediation: (findingId: string, reason?: string) =>
       request<RemediationRecord>("/remediations", { method: "POST", body: JSON.stringify({ findingId, reason }) }),
     validateRemediation: (id: string) => request<RemediationRecord>(`/remediations/${id}/validate`, { method: "POST", body: JSON.stringify({}) }),

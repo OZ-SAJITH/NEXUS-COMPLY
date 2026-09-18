@@ -7,6 +7,7 @@ export * from "./risk";
 export * from "./remediation";
 export * from "./discovery";
 export * from "./impact";
+export * from "./intelligence";
 export * from "./integrity";
 export * from "./evidence";
 export * from "./governance";

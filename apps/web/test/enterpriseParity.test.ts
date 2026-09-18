@@ -311,3 +311,68 @@ describe("PHASE 4 — governance demo mirror (backend parity)", () => {
     for (const f of s.byFramework) expect(f.score).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe("PHASE 6 — AI remediation intelligence demo mirror (backend parity)", () => {
+  const hero = "ast-api-gateway-01";
+
+  it("scans provide a TLS-001 finding that can be analyzed into structured intelligence", () => {
+    const scan = enterpriseDemo.scan(hero, "manual");
+    const tls = scan.findings.find((f) => f.controlId === "TLS-001") ?? scan.findings[0];
+    const rem = enterpriseDemo.remediationIntelligence(tls.id);
+    expect(rem.status).toBe("PLANNED");
+    expect(rem.intelligence).toBeDefined();
+    expect(rem.intelligence!.requiresApproval).toBe(true);
+    expect(rem.intelligence!.provider).toBe("mock");
+    expect(rem.intelligence!.source).toBe("deterministic");
+    expect(rem.intelligence!.evidenceUsed.length).toBeGreaterThan(0);
+    expect(rem.intelligence!.rollbackStatus).toBe("AVAILABLE");
+    expect(rem.planVersions!.length).toBe(1);
+    expect(rem.planVersions![0].approvalStatus).toBe("NONE");
+    expect(rem.planVersions![0].executionStatus).toBe("NOT_EXECUTED");
+  });
+
+  it("second analyze bumps the plan version, reusing the same remediation record", () => {
+    const scan = enterpriseDemo.scan(hero, "manual");
+    const tls = scan.findings.find((f) => f.controlId === "TLS-001") ?? scan.findings[0];
+    const first = enterpriseDemo.remediationIntelligence(tls.id);
+    const second = enterpriseDemo.remediationIntelligence(tls.id);
+    expect(second.id).toBe(first.id);
+    expect(second.intelligence!.version).toBe(2);
+    expect(second.planVersions!.length).toBe(2);
+  });
+
+  it("audit ledger records the AI_REMEDIATION_INTELLIGENCE_GENERATED event", () => {
+    const events = enterpriseDemo.auditEvents();
+    const intel = events.filter((e) => e.eventType === "AI_REMEDIATION_INTELLIGENCE_GENERATED");
+    expect(intel.length).toBeGreaterThan(0);
+    expect(intel[0].source).toBe("ai");
+  });
+
+  it("demoApi serves analyze/list/detail/validate-plan mirroring the REST surface", () => {
+    const findings = dispatchDemo<{ body: Array<{ id: string }> }>("/api/assets/" + hero + "/findings").body;
+    const findingId = findings.find((f) => f.id.startsWith("finding") || f.id.includes(hero))?.id ?? findings[0].id;
+
+    const analyzed = dispatchDemo<{ body: { id: string; intelligence?: unknown; status: string } }>(
+      "/api/findings/" + findingId + "/remediation/analyze",
+      { method: "POST" }
+    ).body;
+    expect(analyzed.status).toBe("PLANNED");
+    expect(analyzed.intelligence).toBeDefined();
+
+    const list = dispatchDemo<{ body: Array<{ id: string }> }>("/api/findings/" + findingId + "/remediation").body;
+    expect(list.some((r) => r.id === analyzed.id)).toBe(true);
+
+    const detail = dispatchDemo<{ body: { id: string } }>("/api/remediation/" + analyzed.id).body;
+    expect(detail.id).toBe(analyzed.id);
+
+    const validated = dispatchDemo<{ body: { id: string; status: string } }>("/api/remediation/" + analyzed.id + "/validate-plan", {
+      method: "POST",
+      body: "{}",
+    }).body;
+    expect(validated.status).toMatch(/VALIDAT/);
+  });
+
+  it("404s the analyze route for an unknown finding", () => {
+    expect(() => dispatchDemo("/api/findings/does-not-exist/remediation/analyze", { method: "POST" })).toThrowError(/not found/i);
+  });
+});

@@ -321,6 +321,23 @@ const { data: connectorProfile, refresh: refreshConnector } = useAsyncData<Asset
     [navigate]
   );
 
+  const remediateIntelligence = useCallback(
+    async (findingId: string) => {
+      setBusy(true);
+      setNotice("");
+      try {
+        const r: RemediationRecord = await api.enterprise.remediationIntelligence(findingId);
+        setNotice(`AI remediation intelligence generated (v${r.intelligence?.version}) for ${r.proposedAction.displayName}.`);
+        navigate("/app/enterprise/remediation");
+      } catch (e) {
+        setNotice(e instanceof Error ? e.message : "Could not generate AI remediation intelligence");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [navigate]
+  );
+
   const setLifecycle = useCallback(
     async (assetId: string, findingId: string, lifecycle: "ACKNOWLEDGED" | "EXCEPTED" | "OPEN") => {
       setBusy(true);
@@ -436,7 +453,7 @@ const { data: connectorProfile, refresh: refreshConnector } = useAsyncData<Asset
           <SectionTitle sub={`From scan ${latest?.id ?? ""}`}>Findings ({findings.length})</SectionTitle>
           <div className="grid md:grid-cols-2 gap-3">
             {findings.map((f) => (
-              <RiskExplainCard key={f.id} finding={f} assetId={id} onAnalyze={() => analyze(f.id)} onRemediate={() => remediate(f.id)} onLifecycle={setLifecycle} context={contextByFinding.get(f.id)} />
+              <RiskExplainCard key={f.id} finding={f} assetId={id} onAnalyze={() => analyze(f.id)} onRemediate={() => remediate(f.id)} onRemediationIntelligence={() => remediateIntelligence(f.id)} onLifecycle={setLifecycle} context={contextByFinding.get(f.id)} />
             ))}
           </div>
         </section>

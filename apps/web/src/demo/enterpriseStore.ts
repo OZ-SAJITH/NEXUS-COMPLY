@@ -25,6 +25,7 @@ import type {
   PolicyProfile,
   PolicySelection,
   RemediationExecutionLogEntry,
+  RemediationPlanVersion,
   RemediationRecord,
   UserRole,
 } from "@nexus/shared-types";
@@ -38,10 +39,12 @@ import {
   buildFindingRiskContext,
   buildImpactGraph,
   buildProposal,
+  buildRemediationIntelligence,
   canTransition,
   collectRawEvidence,
   connectorForAsset,
   connectorTypeForAsset,
+  defaultActionForControl,
   evaluateAssetControl,
   evaluateEvidenceForAsset,
   evidenceIntegrityHash,
@@ -62,6 +65,7 @@ import {
   matureEstate,
   seededConnectors,
   topologyConnections,
+  validateAiRemediationPlanShape,
   verifyEvidenceRecord,
   COMPLIANCE_FRAMEWORKS,
   POLICY_PROFILES,
@@ -266,6 +270,31 @@ function mustRemediation(state: Persisted, id: string): RemediationRecord {
   const r = state.remediations.find((x) => x.id === id);
   if (!r) fail(404, "Remediation not found");
   return r;
+}
+
+function planApprovalStatus(rem: RemediationRecord): RemediationPlanVersion["approvalStatus"] {
+  if (rem.status === "PENDING_APPROVAL") return "PENDING_APPROVAL";
+  if (rem.status === "APPROVED") return "APPROVED";
+  if (rem.status === "REJECTED") return "REJECTED";
+  return "NONE";
+}
+
+function planExecutionStatus(rem: RemediationRecord): RemediationPlanVersion["executionStatus"] {
+  switch (rem.status) {
+    case "EXECUTING":
+    case "VERIFYING":
+      return "EXECUTING";
+    case "COMPLETED":
+    case "VERIFIED":
+      return "EXECUTED";
+    case "FAILED":
+      return "FAILED";
+    case "ROLLING_BACK":
+    case "ROLLED_BACK":
+      return "ROLLED_BACK";
+    default:
+      return "NOT_EXECUTED";
+  }
 }
 
 function latestScan(state: Persisted, assetId: string): AssetScanRecord | undefined {
@@ -776,6 +805,98 @@ export const enterpriseDemo = {
 
   remediationById(id: string): RemediationRecord | undefined {
     return persisted.remediations.find((r) => r.id === id);
+  },
+
+  findingRemediations(findingId: string): RemediationRecord[] {
+    return persisted.remediations.filter((r) => r.findingId === findingId).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  },
+
+  /**
+   * PHASE 6 demo mirror of POST /findings/:id/remediation/analyze. Produces the
+   * same evidence-grounded, structurally validated intelligence as the API
+   * (deterministic baseline — the demo has no live AI provider) and always
+   * stops at the human-approval boundary.
+   */
+  remediationIntelligence(findingId: string): RemediationRecord {
+    const { asset, finding } = findFinding(persisted, findingId);
+    const rows = persisted.evidence.filter((e) => e.findingId === findingId);
+    const effective = rows.length === 0 ? persisted.evidence.filter((e) => e.assetId === asset.id) : rows;
+    const evidence = effective.map((e) => ({ ...e, verification: verifyEvidenceRecord(e) }));
+    const riskContext = this.findingImpact(findingId);
+    const connector = connectorForAsset(persisted.connectors, asset.assetType, asset.vendor);
+    const proposal = buildProposal(finding.controlId, asset.assetType, "");
+    const actionType = defaultActionForControl(finding.controlId) ?? proposal.actionType;
+
+    const existing = persisted.remediations
+      .filter((r) => r.findingId === findingId)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    const latest = existing[0];
+    const base = latest ? Math.max(latest.intelligence?.version ?? 0, latest.planVersions?.length ?? 0) : 0;
+    const version = base + 1;
+
+    const intelligence = buildRemediationIntelligence({
+      finding,
+      asset,
+      allAssets: persisted.assets,
+      evidence,
+      riskContext,
+      governanceContext: finding.governanceContext,
+      connector,
+      actionType,
+      id: uid("int"),
+      version,
+      createdBy: ACTOR.name,
+      provider: "mock",
+    });
+    const shape = validateAiRemediationPlanShape(intelligence);
+    if (!shape.ok) fail(500, `AI remediation intelligence failed structural validation: ${shape.errors.join("; ")}`);
+
+    const rem = latest ?? this.createRemediation(findingId, intelligence.summary);
+    rem.intelligence = intelligence;
+    rem.reason = intelligence.summary;
+    rem.planVersions = [
+      ...(rem.planVersions ?? []),
+      {
+        version,
+        intelligenceId: intelligence.id,
+        createdAt: intelligence.createdAt,
+        source: intelligence.source,
+        provider: intelligence.provider,
+        model: intelligence.model,
+        changeRisk: intelligence.changeRisk,
+        actionType: intelligence.recommendedActions[0]?.actionType ?? rem.proposedAction.actionType,
+        approvalStatus: planApprovalStatus(rem),
+        executionStatus: planExecutionStatus(rem),
+      },
+    ].slice(-20);
+    rem.updatedAt = new Date().toISOString();
+    logEvent(
+      persisted,
+      makeEvent(
+        "AI_REMEDIATION_INTELLIGENCE_GENERATED",
+        "remediation",
+        rem.id,
+        asset.id,
+        finding.controlId,
+        findingId,
+        "ai",
+        {
+          intelligenceId: intelligence.id,
+          version,
+          source: intelligence.source,
+          provider: intelligence.provider,
+          changeRisk: intelligence.changeRisk,
+          evidenceUsed: intelligence.evidenceUsed.length,
+          evidenceVerified: intelligence.evidenceUsed.filter((e) => e.verified).length,
+          confidence: intelligence.confidence,
+          requiresApproval: intelligence.requiresApproval,
+          actionTypes: intelligence.recommendedActions.map((a) => a.actionType),
+        },
+        ACTOR
+      )
+    );
+    persist();
+    return rem;
   },
 
   createRemediation(findingId: string, reason?: string): RemediationRecord {
