@@ -53,8 +53,8 @@ The landing dashboard shows **real aggregates**:
 - Find the **TLS-001** card (`SET_TLS_MIN_VERSION`, risk band CRITICAL, status **PLANNED**). Click **Generate AI plan**.
 - The card expands with the **AI Remediation Intelligence** panel:
   - header: version badge **v1**, source badge **Baseline remediation guidance** (deterministic, evidence-grounded — never presented as an AI verdict), **Change risk HIGH** pill, confidence.
-  - **Root cause** with certainty badge **EVIDENCE_GROUNDED**, **Evidence used** rows with verified chips + short hashes (derived SHA-256 over the stored payload).
-  - **Recommended actions** — *Disable TLS 1.0 / TLS 1.1* (`SET_TLS_MIN_VERSION`) + *Enforce strong cipher suites* (`ENFORCE_STRONG_CIPHERS`), each with target / expected config state / reason and an "approval required" badge.
+  - **Root cause** with certainty badge **Evidence-grounded**, **Evidence used** rows with verified chips + short hashes (derived SHA-256 over the stored payload).
+  - **Recommended actions** — *Set minimum TLS version to 1.2; disable TLS 1.0/1.1 cipher suites* (`SET_TLS_MIN_VERSION`) + *Apply strong cipher configuration and remove legacy key exchange / weak ciphers* (`ENFORCE_STRONG_CIPHERS`), each with target / expected config state / reason and an "approval required" badge.
   - **Pre-checks**, **Validation plan** (BEFORE / CHANGE / AFTER with expected evidence), **Rollback plan** + **AVAILABLE**, **Expected result**, **Connector capability** (vendor-aware) and the **Unavailable** list.
 - Click **Regenerate AI plan** → notice: *regenerated v2* — the record keeps its history (version bumps, no overwrite).
 - Keep the **human gate** on: Validate → **Request approval** → **Approve** → Execute → verify — the AI only proposes the change; the orchestrator (with the production connector policy gate intact) executes after human approval.
