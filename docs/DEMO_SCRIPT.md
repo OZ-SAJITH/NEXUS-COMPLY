@@ -48,8 +48,21 @@ The landing dashboard shows **real aggregates**:
 - Back to **Enterprise → Audit Trail**: filter `Governance exception decided` → the decision is timestamped, actor-attributed, append-only. Dashboard **Regional & framework posture** panel echoes the same numbers.
 > Speak to: *the policy is data, not code — swap a regional profile and the applicability engine re-derives the posture; exceptions are governed decisions, so a FAIL stays visible as FAIL + EXCEPTION APPROVED.*
 
+## 7. AI Remediation Intelligence — PHASE 6 (60s)
+- Sidebar → **Enterprise** → **Remediation** (portrait: Workflow).
+- Find the **TLS-001** card (`SET_TLS_MIN_VERSION`, risk band CRITICAL, status **PLANNED**). Click **Generate AI plan**.
+- The card expands with the **AI Remediation Intelligence** panel:
+  - header: version badge **v1**, source badge **Baseline remediation guidance** (deterministic, evidence-grounded — never presented as an AI verdict), **Change risk HIGH** pill, confidence.
+  - **Root cause** with certainty badge **EVIDENCE_GROUNDED**, **Evidence used** rows with verified chips + short hashes (derived SHA-256 over the stored payload).
+  - **Recommended actions** — *Disable TLS 1.0 / TLS 1.1* (`SET_TLS_MIN_VERSION`) + *Enforce strong cipher suites* (`ENFORCE_STRONG_CIPHERS`), each with target / expected config state / reason and an "approval required" badge.
+  - **Pre-checks**, **Validation plan** (BEFORE / CHANGE / AFTER with expected evidence), **Rollback plan** + **AVAILABLE**, **Expected result**, **Connector capability** (vendor-aware) and the **Unavailable** list.
+- Click **Regenerate AI plan** → notice: *regenerated v2* — the record keeps its history (version bumps, no overwrite).
+- Keep the **human gate** on: Validate → **Request approval** → **Approve** → Execute → verify — the AI only proposes the change; the orchestrator (with the production connector policy gate intact) executes after human approval.
+> Speak to: *the plan is generated as data and structurally validated before it is stored; evidence is a consideration, not invented ground truth — no evidence would flip the root cause to INSUFFICIENT_EVIDENCE; baseline guidance is labeled as such, never an AI verdict; and approval is always required — the AI can never bypass the human.*
+
 ## Exit hooks for judges
 - "How is this adaptive?" → unknown vendor + AI proposal + approval + structural-fingerprint reuse.
 - "Is AI trusted by default?" → no — PENDING gate, mock provider default, offline fallback still requires approval.
 - "Where are the credentials?" → never sent; redaction happens before the AI call; report shows redaction counts.
 - "Can it scale?" → JSON repo is an adapter; swap in PostgreSQL (docker-compose provided); parsers are a plugin registry.
+- "What does the AI plan add?" (PHASE 6) → structured, evidence-grounded remediation plans with derived hashes, change-risk classification, validation/rollback steps, baseline-labeled fallback — generated as data into the same human-approved workflow, never executed directly.
