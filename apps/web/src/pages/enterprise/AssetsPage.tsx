@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, RefreshCw, Radar, Globe2, ShieldAlert } from "lucide-react";
+import { Search, RefreshCw, Globe2, ShieldAlert } from "lucide-react";
 import type { AssetRecord, ConnectorRecord, ConnectorStatus } from "@nexus/shared-types";
 import { api } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
@@ -9,6 +9,7 @@ import { LoadingState, ErrorState, EmptyState } from "../../components/states";
 import { SeverityBadge, StatusBadge, Stat, Progress, SectionTitle } from "../../components/ui";
 import { EnterpriseTabs, DiscoveryStageBadge } from "./EnterpriseTabs";
 import { AssetStatusChip } from "../../components/assets/AssetStatusChip";
+import { DiscoveryWizard } from "../../components/assets/DiscoveryWizard";
 import { timeAgo } from "../../utils/cn";
 
 const ACTIVE_STAGES = new Set(["IDENTIFIED", "CONNECTABLE", "SCANNABLE", "MONITORED", "COMPLIANT", "NON_COMPLIANT"]);
@@ -52,7 +53,6 @@ const COMPLIANCE_OPTIONS: Array<{ value: string; label: string }> = [
 export default function AssetsPage() {
   const { data: assets, loading, error, refresh } = useAsyncData<AssetRecord[]>(() => api.enterprise.assets(), []);
   const { data: connectors, refresh: refreshConnectors } = useAsyncData<ConnectorRecord[]>(() => api.enterprise.connectors(), []);
-  const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [query, setQuery] = useState("");
   const [criticality, setCriticality] = useState("ALL");
@@ -63,22 +63,6 @@ export default function AssetsPage() {
   const [tier, setTier] = useState("ALL");
   const [compliance, setCompliance] = useState("ALL");
   const [connectorStatus, setConnectorStatus] = useState("ALL");
-
-  const runDiscovery = async () => {
-    setBusy(true);
-    setNotice("");
-    try {
-      const r = await api.enterprise.discover();
-      const regions = new Set(r.assets.map((a) => a.regionLabel).filter(Boolean));
-      setNotice(`Discovery run ${r.runId}: ${r.discovered} new assets discovered across ${regions.size} region${regions.size === 1 ? "" : "s"}, ${r.updated} updated.`);
-      refresh();
-      refreshConnectors();
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : "Discovery failed");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const list = assets ?? [];
   const conns = connectors ?? [];
@@ -158,9 +142,14 @@ export default function AssetsPage() {
         title="Enterprise Asset Portfolio"
         subtitle="Simulated multi-region infrastructure discovered and catalogued by the NEXUS-COMPLY engine. Every asset carries a discovery stage, a compliance posture and evidence-grounded risk."
         actions={
-          <button onClick={runDiscovery} disabled={busy} className="btn-primary text-sm inline-flex items-center gap-2">
-            <Radar className="w-4 h-4" aria-hidden="true" /> {busy ? "Discovering…" : "Discover Assets"}
-          </button>
+          <DiscoveryWizard
+            className="btn-primary text-sm inline-flex items-center gap-2"
+            onResult={setNotice}
+            onComplete={() => {
+              refresh();
+              refreshConnectors();
+            }}
+          />
         }
       />
       <EnterpriseTabs />

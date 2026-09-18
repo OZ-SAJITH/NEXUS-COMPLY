@@ -8,6 +8,7 @@ import ConnectorsPage from "../src/pages/enterprise/ConnectorsPage";
 import GovernancePage from "../src/pages/enterprise/GovernancePage";
 import DashboardPage from "../src/pages/DashboardPage";
 import EnterpriseAuditPage from "../src/pages/enterprise/EnterpriseAuditPage";
+import AssetsPage from "../src/pages/enterprise/AssetsPage";
 import { AssetCard } from "../src/components/assets/AssetCard";
 import { AssetStatusChip } from "../src/components/assets/AssetStatusChip";
 
@@ -306,6 +307,46 @@ describe("AssetCard / AssetStatusChip — shared components/assets (jsdom render
     expect(text).toContain(asset!.criticality);
     const link = container.querySelector("a");
     expect(link?.getAttribute("href")).toBe(`/app/enterprise/assets/${HERO}`);
+    act(() => root.unmount());
+  });
+});
+
+describe("AssetsPage — portfolio inventory + DiscoveryWizard (jsdom render probe)", () => {
+  function mountAssets() {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/app/enterprise"]}>
+          <Routes>
+            <Route path="/app/enterprise" element={<AssetsPage />} />
+            <Route path="/app/enterprise/assets" element={<AssetsPage />} />
+          </Routes>
+        </MemoryRouter>
+      );
+    });
+    return { root, container };
+  }
+
+  it("renders the inventory with regional footprint, shared criticality chips and the discovery run", async () => {
+    const { root, container } = mountAssets();
+    await flush();
+    const text = container.textContent ?? "";
+    expect(text).toContain("Enterprise Asset Portfolio");
+    expect(text).toContain("Total assets");
+    expect(text).toContain("Regional footprint");
+    expect(text).toContain("CRITICAL");
+    expect([...container.querySelectorAll("a")].some((l) => l.getAttribute("href") === `/app/enterprise/assets/${HERO}`)).toBe(true);
+
+    const discover = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Discover Assets"));
+    expect(discover).toBeDefined();
+    const before = enterpriseDemo.listAssets().length;
+    await act(async () => discover!.click());
+    await flush();
+    expect(enterpriseDemo.listAssets().length).toBeGreaterThan(before);
+    const after = container.textContent ?? "";
+    expect(after).toMatch(/Discovery run \S+: \d+ new assets discovered/);
     act(() => root.unmount());
   });
 });

@@ -141,10 +141,11 @@ apps/web (extended)
     asset → service → app → database → business cascade) now renders the
     long-unused `GET /assets/:id/impact` surface on `AssetDetailPage`. New
     `AssetStatusChip` (shared criticality chip — dedups the duplicated
-    `CRITICALITY_STYLE` maps in `AssetsPage` and `ImpactGraphView`) and
+    `CRITICALITY_STYLE` maps in `AssetsPage` and `ImpactGraphView`),
     `AssetCard` (compact linked asset-identity card used by the `GovernancePage`
-    decision trace, pinned by render probes). Remaining entry (DiscoveryWizard)
-    is covered inline by the `AssetsPage` discovery-run affordance.
+    decision trace), and `DiscoveryWizard` (the discovery-run affordance —
+    button + API call + result notice — used by `AssetsPage`), all pinned by
+    render probes. The §3 named-component list is now fully shipped.
 
 ---
 
@@ -301,5 +302,5 @@ Each is mapped to representative frameworks (ISO 27001 / NIST CSF / CIS / PCI DS
 - **Frontend surfacing (shipped)**: `DashboardPage` gains a "Regional & framework posture" panel (byRegion/byFramework with score bars + COMPLIANT/PARTIAL/AT_RISK/NOT_ASSESSED chips + link into enterprise governance) inside the enterprise closed-loop section. `AssetDetailPage` gains an Adaptive Governance panel — policy selection (with deterministic region→policy explanation + framework chips), applicable-controls grid (severity badges, whyApplicable, framework membership, show-all toggle), and governed exceptions (request form scoped to the asset's finding controls, Approve/Reject for REQUESTED, "FAIL + EXCEPTION APPROVED" render note, live reload after each decision). New `Enterprise Governance` hub at `/app/enterprise/governance` (`pages/enterprise/GovernancePage.tsx`): regime posture, framework catalog (applicability/scope/status + disclaimer disclosure), regional policy profiles table, asset decision-trace explorer (auto-loads the first asset, re-evaluates on selection, links into the detail page), and the exception registry with Approve/Reject. Registered in `App.tsx`, `EnterpriseTabs.tsx` (Portfolio/Topology/**Governance**/Connectors/Remediation/Audit Trail), AppShell nav, and breadcrumbs special-cased to "Enterprise Governance". `EnterpriseAuditPage` adds dedicated chips for the governance-exception events and names governance in its subtitle. `docs/DEMO_SCRIPT.md` gains a PHASE 4 walkthrough segment (regime posture → catalog → deterministic policy → decision trace → exception request/approve → audit trail).
 
 ### Remaining (not yet shipped)
-- Impact graph rendered on `AssetDetailPage` via `components/assets/ImpactGraphView.tsx` (shipped); `AssetStatusChip` + `AssetCard` now shipped as shared `components/assets` modules; DiscoveryWizard as a named component (§3) remains covered inline by the `AssetsPage` discovery-run affordance.
+- Impact graph rendered on `AssetDetailPage` via `components/assets/ImpactGraphView.tsx` (shipped); `AssetStatusChip`, `AssetCard` and `DiscoveryWizard` are now shipped as shared `components/assets` modules with render probes. No remaining inline §3 entries.
 - Production connector adapters: the universal adapter contract and the **production connector policy gate** (§ `packages/enterprise-catalog/src/connectors.ts`) are shipped — `ConnectorMode` (SIMULATED/PRODUCTION), `ProductionConnectorPolicy` (`allowProductionAdapters=false`, empty `allowlistedVendors`), `connectorModeFor`, `authorizeConnectorAction`, and a `simulated: boolean` widening of `ConnectorRecord`. The gate is **enforced** at the remediation execution boundary in both the API orchestrator (`remediationService.ts` executeRemediation: denied ⇒ FAILED with `policyGate=true` detail + audit event) and the demo-store mirror (`enterpriseStore.ts` execute). `ConnectorsPage` now surfaces the boundary per adapter (SIMULATED mode chip · "production execution denied (allowlist empty)") and in the status legend ("denied by the policy gate until enabled and allowlisted"), pinned by the ConnectorsPage render probe. Real vendor adapters remain out of scope; the prototype executes simulated-only, and any future production adapter is denied until explicitly enabled + allowlisted.
