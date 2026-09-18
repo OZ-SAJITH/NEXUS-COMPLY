@@ -1,4 +1,4 @@
-import { AppWindow, ArrowRight, Boxes, Briefcase, ChevronRight, Database, Server } from "lucide-react";
+import { AppWindow, ArrowRight, Boxes, Briefcase, ChevronRight, Database, Globe, Server } from "lucide-react";
 import type { AssetImpactGraph, ImpactNode } from "@nexus/shared-types";
 import { cn } from "../../utils/cn";
 import { AssetStatusChip } from "./AssetStatusChip";
@@ -10,6 +10,7 @@ const KIND_META: Record<ImpactNode["kind"], { label: string; icon: typeof Boxes;
   database: { label: "Database", icon: Database, cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" },
   business: { label: "Business impact", icon: Briefcase, cls: "border-amber-500/40 bg-amber-500/10 text-amber-300" },
   data: { label: "Data", icon: Database, cls: "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300" },
+  internet: { label: "Internet edge", icon: Globe, cls: "border-blue-500/40 bg-blue-500/10 text-blue-300" },
 };
 
 function ImpactNodeCard({ node, isRoot }: { node: ImpactNode; isRoot: boolean }) {
@@ -26,6 +27,8 @@ function ImpactNodeCard({ node, isRoot }: { node: ImpactNode; isRoot: boolean })
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         <span className="px-1 py-0.5 rounded border border-slate-500/30 bg-slate-500/5 text-[9px] uppercase tracking-wider text-slate-400">{meta.label}</span>
         {node.criticality ? <AssetStatusChip criticality={node.criticality} size="sm" /> : null}
+        {node.region ? <span className="px-1 py-0.5 rounded border border-slate-500/30 bg-slate-500/5 text-[9px] uppercase tracking-wider text-slate-400">{node.region}</span> : null}
+        {node.riskScore !== undefined ? <span className="px-1 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-[9px] font-semibold uppercase tracking-wider text-red-300">risk {node.riskScore}</span> : null}
       </div>
     </div>
   );

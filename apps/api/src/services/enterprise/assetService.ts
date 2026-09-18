@@ -2,6 +2,7 @@ import type {
   AssetConnectorProfile,
   AssetControlCatalogue,
   AssetControlFramework,
+  AssetExposurePath,
   AssetFinding,
   AssetImpactGraph,
   AssetRecord,
@@ -12,10 +13,12 @@ import type {
   EvidenceWithVerification,
   FindingLifecycle,
   FindingLifecycleUpdate,
+  FindingRiskContext,
   Severity,
 } from "@nexus/shared-types";
 import {
   assetRelationships,
+  buildFindingRiskContext,
   buildImpactGraph,
   collectRawEvidence,
   computeFrameworkPosture,
@@ -23,6 +26,7 @@ import {
   evaluateAssetControl,
   evaluateEvidenceForAsset,
   explainableRisk,
+  exposurePathForAsset,
   findingsFromResults,
   getAssetControlById,
   getAssetControls,
@@ -532,6 +536,46 @@ export async function complianceSummary(ctx: Instantiation): Promise<ComplianceS
 export async function assetImpact(ctx: Instantiation, assetId: string): Promise<AssetImpactGraph> {
   const asset = await requireAsset(ctx, assetId);
   return buildImpactGraph(asset, await ctx.repo.allAssets());
+}
+
+/**
+ * PHASE 5 impact-graph alias (GET /assets/:id/graph) — same bounded cascade as
+ * /assets/:id/impact, exposed under the graph endpoint name.
+ */
+export async function assetGraph(ctx: Instantiation, assetId: string): Promise<AssetImpactGraph> {
+  return assetImpact(ctx, assetId);
+}
+
+/**
+ * PHASE 5 finding risk context (GET /findings/:id/impact): deterministic risk
+ * score + contributors from the explainable risk model, plus the potential
+ * blast radius and a 0–100 impact score computed from the asset graph. Evidence
+ * confidence is read from the finding's persisted evidence records — never
+ * hard-coded.
+ */
+export async function findingRiskContext(ctx: Instantiation, findingId: string): Promise<FindingRiskContext> {
+  const { finding, asset } = await findAssetFinding(ctx, findingId);
+  const evidence = await ctx.repo.evidenceForFinding(findingId);
+  const confidence = evidence.length > 0 ? Math.max(...evidence.map((e) => e.confidence ?? 0)) : 0.99;
+  return buildFindingRiskContext({
+    findingId: finding.id,
+    severity: finding.severity,
+    asset,
+    allAssets: await ctx.repo.allAssets(),
+    riskExplanation: finding.riskExplanation,
+    evidenceConfidence: confidence,
+  });
+}
+
+/**
+ * PHASE 5 exposure path (GET /findings/:id/exposure-path): bounded potential
+ * path from the internet/edge boundary through firewalls/proxies to the asset
+ * and its key downstream dependents. Labeled "potential" — never an attack
+ * claim.
+ */
+export async function findingExposurePath(ctx: Instantiation, assetId: string): Promise<AssetExposurePath> {
+  const asset = await requireAsset(ctx, assetId);
+  return exposurePathForAsset(asset, await ctx.repo.allAssets());
 }
 
 async function requireAsset(ctx: Instantiation, assetId: string): Promise<AssetRecord> {

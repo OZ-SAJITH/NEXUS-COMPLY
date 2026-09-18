@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { AlignLeft, BrainCircuit, ChevronDown, ChevronRight } from "lucide-react";
-import type { AssetFinding } from "@nexus/shared-types";
+import { AlignLeft, BrainCircuit, ChevronDown, ChevronRight, Crosshair } from "lucide-react";
+import type { AssetFinding, FindingRiskContext } from "@nexus/shared-types";
 import { SeverityBadge, StatusBadge } from "../ui";
 import { cn } from "../../utils/cn";
+import { RiskContextPanel } from "./RiskContextPanel";
 
 function LifecycleBadge({ lifecycle }: { lifecycle?: AssetFinding["lifecycle"] }) {
   const lc = lifecycle ?? "OPEN";
@@ -26,15 +27,21 @@ export function RiskExplainCard({
   onAnalyze,
   onRemediate,
   onLifecycle,
+  context,
 }: {
   finding: AssetFinding;
   assetId: string;
   onAnalyze: () => void;
   onRemediate: () => void;
   onLifecycle: (assetId: string, findingId: string, lifecycle: "ACKNOWLEDGED" | "EXCEPTED" | "OPEN") => void;
+  context?: FindingRiskContext;
 }) {
   const [open, setOpen] = useState(false);
+  const [impactOpen, setImpactOpen] = useState(false);
   const humanStates: Array<"ACKNOWLEDGED" | "EXCEPTED" | "OPEN"> = ["ACKNOWLEDGED", "EXCEPTED", "OPEN"];
+  const viewGraph = () => {
+    document.getElementById("impact")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   return (
     <div className={cn("rounded-lg border p-3 text-sm", finding.status === "FAIL" ? "border-red-500/30 bg-red-500/[0.04]" : "border-amber-500/30 bg-amber-500/[0.04]")}>
       <div className="flex flex-wrap items-center gap-2">
@@ -79,6 +86,17 @@ export function RiskExplainCard({
             </div>
           ) : null}
         </div>
+      ) : null}
+      {context ? (
+        <>
+          <button onClick={() => setImpactOpen((v) => !v)} className="mt-2 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500 hover:text-accent">
+            {impactOpen ? <ChevronDown className="w-3 h-3" aria-hidden="true" /> : <ChevronRight className="w-3 h-3" aria-hidden="true" />}
+            <Crosshair className="w-3 h-3" aria-hidden="true" />
+            Potential impact / blast radius
+            <span className="ml-1 px-1 py-0.5 rounded border border-surface-700 text-[9px] font-semibold text-slate-400">{context.impactScore}/100</span>
+          </button>
+          {impactOpen ? <div className="mt-2"><RiskContextPanel context={context} onViewGraph={viewGraph} /></div> : null}
+        </>
       ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button onClick={onAnalyze} className="btn !py-1.5 text-xs inline-flex items-center gap-1.5">

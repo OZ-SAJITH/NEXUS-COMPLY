@@ -515,6 +515,14 @@ export type ComplianceFrameworkId = string;
 export type GovernanceControlId = string;
 export type RiskBand = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
+/**
+ * Industry-standard network exposure class, derived deterministically from the
+ * asset's observed zone, tier and tags (never hard-coded). INTERNET_FACING and
+ * DMZ assets sit on the edge; PARTNER reachable across an extranet; RESTRICTED
+ * is management-only; INTERNAL is the default private-network posture.
+ */
+export type NetworkExposure = "INTERNAL" | "RESTRICTED" | "PARTNER" | "DMZ" | "INTERNET_FACING";
+
 export type DeploymentModel = "ON_PREM" | "CLOUD" | "HYBRID" | "MULTI_CLOUD" | "EDGE";
 export type OrgSize = "SME" | "MID" | "ENTERPRISE" | "GOVERNMENT";
 
@@ -1691,10 +1699,17 @@ export interface DiscoveryResult {
 export interface ImpactNode {
   id: string;
   label: string;
-  kind: "asset" | "service" | "application" | "database" | "business" | "data";
+  kind: "asset" | "service" | "application" | "database" | "business" | "data" | "internet";
   detail?: string;
   criticality?: AssetCriticality;
   reachedFrom?: string;
+  assetType?: AssetType;
+  region?: string;
+  tier?: NetworkTier;
+  environment?: AssetEnvironment;
+  riskScore?: number;
+  riskBand?: RiskBand;
+  complianceStatus?: FindingStatus;
 }
 
 export interface ImpactEdge {
@@ -1709,6 +1724,84 @@ export interface AssetImpactGraph {
   nodes: ImpactNode[];
   edges: ImpactEdge[];
   summary: string[];
+  generatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 5 — finding risk context, blast radius and potential exposure path.
+// Every value below is computed deterministically from the asset graph and the
+// explainable risk model — never hard-coded. Terminology stays precautionary:
+// "potential impact" / "blast radius" / "exposure path", never confirmed attack.
+// ---------------------------------------------------------------------------
+
+export interface FindingBlastRadius {
+  /** Downstream asset ids reachable from the finding's asset (bounded traversal). */
+  affectedAssetIds: string[];
+  affectedAssetCount: number;
+  /** Distinct downstream assets carrying CRITICAL or HIGH criticality. */
+  criticalAssetsAffected: number;
+  /** Distinct downstream service labels (e.g. Database, Message queue). */
+  affectedServices: string[];
+  servicesAffected: number;
+  /** Distinct region codes across the affected sub-graph (incl. the root asset). */
+  regionsAffected: string[];
+  /** True when the blast radius spans more than one region. */
+  crossRegion: boolean;
+}
+
+export interface FindingRiskContext {
+  findingId: string;
+  assetId: string;
+  assetName: string;
+  /** Deterministic 0–100 contextual risk (matche finding.risk for FAIL findings). */
+  riskScore: number;
+  riskLevel: RiskBand;
+  severity: Severity;
+  assetType: AssetType;
+  assetCriticality: AssetCriticality;
+  /** Industry-standard exposure class derived from zone/tier/tags. */
+  exposure: NetworkExposure;
+  /** Deterministic 0–100 potential-impact score from the blast radius. */
+  impactScore: number;
+  blastRadius: FindingBlastRadius;
+  evidenceConfidence: number;
+  contributors: {
+    assetCriticality: string;
+    exposure: NetworkExposure;
+    severityContribution: number;
+    exposureContribution: number;
+    criticalityContribution: number;
+    importanceContribution: number;
+    exploitabilityContribution: number;
+    complianceImpact: string;
+    evidenceConfidence: number;
+    dependencyImpact: string;
+  };
+  /** "Why this risk score?" prose assembled from actual contributor values. */
+  explanation: string;
+}
+
+export interface ExposurePathHop {
+  id: string;
+  name: string;
+  kind: "internet" | "edge" | "asset";
+  assetType?: AssetType;
+  criticality?: AssetCriticality;
+  exposure?: NetworkExposure;
+  relation?: string;
+  protocol?: string;
+  port?: number;
+}
+
+export interface AssetExposurePath {
+  rootAssetId: string;
+  rootName: string;
+  /** Ordered "potential exposure path" from the internet/edge boundary inward (bounded). */
+  path: ExposurePathHop[];
+  depth: number;
+  potential: true;
+  label: "Potential exposure path";
+  disclaimer: string;
   generatedAt: string;
 }
 

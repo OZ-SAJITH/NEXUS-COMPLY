@@ -2,7 +2,9 @@ import type {
   AiProviderMode,
   ApplicableControlsResult,
   AssetConnectorProfile,
+  AssetExposurePath,
   AssetFinding,
+  AssetImpactGraph,
   AssetRecord,
   AssetScanRecord,
   AuditEventRecord,
@@ -14,6 +16,7 @@ import type {
   EvidenceWithVerification,
   FindingAnalysis,
   FindingLifecycle,
+  FindingRiskContext,
   GovernanceDecisionTrace,
   GovernanceException,
   GovernanceExceptionDecision,
@@ -32,6 +35,7 @@ import {
   applyRemediationAction,
   authorizeConnectorAction,
   assetRelationships,
+  buildFindingRiskContext,
   buildImpactGraph,
   buildProposal,
   canTransition,
@@ -43,6 +47,7 @@ import {
   evidenceIntegrityHash,
   evidenceTypeForControlId,
   explainableRisk,
+  exposurePathForAsset,
   exploitabilityWeightOf,
   exposureWeightOfAsset,
   findingsFromResults,
@@ -617,6 +622,35 @@ export const enterpriseDemo = {
   assetImpact(assetId: string) {
     const asset = mustAsset(persisted, assetId);
     return buildImpactGraph(asset, persisted.assets);
+  },
+
+  assetGraph(assetId: string): AssetImpactGraph {
+    const asset = mustAsset(persisted, assetId);
+    return buildImpactGraph(asset, persisted.assets);
+  },
+
+  findingImpact(findingId: string): FindingRiskContext {
+    for (const a of persisted.assets) {
+      const f = latestScan(persisted, a.id)?.findings.find((x) => x.id === findingId);
+      if (f) {
+        const evidence = persisted.evidence.filter((e) => e.findingId === findingId);
+        const confidence = evidence.length > 0 ? Math.max(...evidence.map((e) => e.confidence ?? 0)) : 0.99;
+        return buildFindingRiskContext({
+          findingId: f.id,
+          severity: f.severity,
+          asset: a,
+          allAssets: persisted.assets,
+          riskExplanation: f.riskExplanation,
+          evidenceConfidence: confidence,
+        });
+      }
+    }
+    fail(404, "Finding not found");
+  },
+
+  findingExposurePath(assetId: string): AssetExposurePath {
+    const asset = mustAsset(persisted, assetId);
+    return exposurePathForAsset(asset, persisted.assets);
   },
 
   topology() {

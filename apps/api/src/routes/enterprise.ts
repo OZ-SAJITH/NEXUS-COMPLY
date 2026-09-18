@@ -7,12 +7,15 @@ import {
   assetControlCatalogue,
   assetEvidence,
   assetFindings,
+  assetGraph,
   assetImpact,
   assetScans,
   complianceSummary,
   discoverAssets,
   ensureAssets,
   evidenceDetail,
+  findingExposurePath,
+  findingRiskContext,
   scanAsset,
   setFindingLifecycle,
   testAssetConnector,
@@ -131,6 +134,37 @@ enterpriseRouter.get("/assets/:id/impact", async (req, res) => {
   const repo = getRepository();
   const graph = await assetImpact({ repo, manager: new ConnectorManager(repo) }, req.params.id);
   res.json(graph);
+});
+
+// PHASE 5 — graph endpoint alias (same bounded cascade as /impact).
+enterpriseRouter.get("/assets/:id/graph", async (req, res) => {
+  const repo = getRepository();
+  const graph = await assetGraph({ repo, manager: new ConnectorManager(repo) }, req.params.id);
+  res.json(graph);
+});
+
+// PHASE 5 — finding risk context: deterministic score + contributors + blast
+// radius + impact score for a single finding.
+enterpriseRouter.get("/findings/:id/impact", async (req, res, next) => {
+  try {
+    const repo = getRepository();
+    const context = await findingRiskContext({ repo, manager: new ConnectorManager(repo) }, req.params.id);
+    res.json(context);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PHASE 5 — bounded potential exposure path for an asset ("potential", never
+// a confirmed attack path).
+enterpriseRouter.get("/findings/:id/exposure-path", async (req, res, next) => {
+  try {
+    const repo = getRepository();
+    const path = await findingExposurePath({ repo, manager: new ConnectorManager(repo) }, req.params.id);
+    res.json(path);
+  } catch (err) {
+    next(err);
+  }
 });
 
 const lifecycleSchema = z.object({

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, ScanSearch, BrainCircuit, Scale } from "lucide-react";
-import type { ApplicableControlsResult, AssetConnectorProfile, AssetImpactGraph, AssetRecord, AssetScanRecord, EvidenceRecord, EvidenceWithVerification, FindingAnalysis, GovernanceDecisionTrace, GovernanceException, PolicySelection, RemediationRecord } from "@nexus/shared-types";
+import type { ApplicableControlsResult, AssetConnectorProfile, AssetExposurePath, AssetImpactGraph, AssetRecord, AssetScanRecord, EvidenceRecord, EvidenceWithVerification, FindingAnalysis, FindingRiskContext, GovernanceDecisionTrace, GovernanceException, PolicySelection, RemediationRecord } from "@nexus/shared-types";
 import { api } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { PageHeader } from "../../components/PageHeader";
@@ -16,6 +16,7 @@ import { EvidenceInspector } from "../../components/assets/EvidenceInspector";
 import { ConnectorHealthList } from "../../components/assets/ConnectorHealthList";
 import { RiskExplainCard } from "../../components/assets/RiskExplainCard";
 import { ImpactGraphView } from "../../components/assets/ImpactGraphView";
+import { ExposurePathList } from "../../components/assets/ExposurePathList";
 
 function GovernancePanel({ assetId, findingControls }: { assetId: string; findingControls: Array<{ controlId: string; controlName: string }> }) {
   const [evalState, setEvalState] = useState<{ policy: PolicySelection; applicableControls: ApplicableControlsResult; trace: GovernanceDecisionTrace; exceptions: GovernanceException[] } | null>(null);
@@ -234,6 +235,7 @@ export default function AssetDetailPage() {
   const { data: evidence, refresh: refreshEvidence } = useAsyncData<EvidenceRecord[]>(() => api.enterprise.assetEvidence(id), [id]);
 const { data: connectorProfile, refresh: refreshConnector } = useAsyncData<AssetConnectorProfile>(() => api.enterprise.assetConnector(id), [id]);
   const { data: impact } = useAsyncData<AssetImpactGraph>(() => api.enterprise.assetImpact(id) as Promise<AssetImpactGraph>, [id]);
+  const { data: exposurePath } = useAsyncData<AssetExposurePath | null>(() => (id ? api.enterprise.findingExposurePath(id) : Promise.resolve(null)), [id]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [analysis, setAnalysis] = useState<FindingAnalysis | null>(null);
@@ -336,12 +338,18 @@ const { data: connectorProfile, refresh: refreshConnector } = useAsyncData<Asset
     [refreshScans]
   );
 
+  const latest = scans?.[0];
+  const findings = latest?.findings ?? [];
+  const findingKey = findings.map((f) => f.id).join(",");
+  const { data: riskContexts } = useAsyncData<FindingRiskContext[]>(() => (
+    findings.length > 0 ? Promise.all(findings.map((f) => api.enterprise.findingImpact(f.id))) : Promise.resolve([])
+  ), [findingKey, id]);
+  const contextByFinding = new Map((riskContexts ?? []).map((c) => [c.findingId, c]));
+
   if (loading && !asset) return <LoadingState label="Loading asset…" />;
   if (error && !asset) return <ErrorState title="Could not load asset" detail={error} onRetry={refresh} />;
   if (!asset) return null;
 
-  const latest = scans?.[0];
-  const findings = latest?.findings ?? [];
   const failing = findings.filter((f) => f.status === "FAIL").length;
   const warningCount = findings.filter((f) => f.status === "WARNING").length;
   const risk = latest?.risk;
@@ -414,9 +422,12 @@ const { data: connectorProfile, refresh: refreshConnector } = useAsyncData<Asset
       )}
 
       {impact ? (
-        <section>
+        <section id="impact">
           <SectionTitle sub="Asset → service → application → database → business blast-radius from the simulated asset graph">Impact cascade</SectionTitle>
-          <ImpactGraphView graph={impact} />
+          <div className="space-y-4">
+            <ImpactGraphView graph={impact} />
+            {exposurePath ? <ExposurePathList path={exposurePath} /> : null}
+          </div>
         </section>
       ) : null}
 
@@ -425,7 +436,7 @@ const { data: connectorProfile, refresh: refreshConnector } = useAsyncData<Asset
           <SectionTitle sub={`From scan ${latest?.id ?? ""}`}>Findings ({findings.length})</SectionTitle>
           <div className="grid md:grid-cols-2 gap-3">
             {findings.map((f) => (
-              <RiskExplainCard key={f.id} finding={f} assetId={id} onAnalyze={() => analyze(f.id)} onRemediate={() => remediate(f.id)} onLifecycle={setLifecycle} />
+              <RiskExplainCard key={f.id} finding={f} assetId={id} onAnalyze={() => analyze(f.id)} onRemediate={() => remediate(f.id)} onLifecycle={setLifecycle} context={contextByFinding.get(f.id)} />
             ))}
           </div>
         </section>
