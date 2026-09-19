@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AssetFinding, FindingBlastRadius, RemediationRecord } from "@nexus/shared-types";
 import {
   buildRemediationIntelligence,
@@ -397,5 +398,123 @@ describe("PHASE 6 — analyzeRemediationIntelligence (service integration)", () 
       connectorAuthorized: true,
     });
     expect(rem.intelligence!.changeRisk).toBe(expected.risk);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Live-provider enrichment + honest fallback (PHASE 6 §19/§29).
+// ---------------------------------------------------------------------------
+
+describe("PHASE 6 — live AI remediation enrichment and fallback", () => {
+  const savedEnv = { provider: process.env.AI_PROVIDER, url: process.env.AI_SERVICE_URL };
+
+  function stopServer(server: Server): Promise<void> {
+    return new Promise((resolve) => server.close(() => resolve()));
+  }
+
+  function startMockAi(respond: (body: unknown) => { status: number; json: Record<string, unknown> }): Promise<{ server: Server; base: string }> {
+    return new Promise((resolve) => {
+      const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+        const chunks: Buffer[] = [];
+        req.on("data", (c: Buffer) => chunks.push(c));
+        req.on("end", () => {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+          const out = respond(body);
+          res.writeHead(out.status, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(out.json));
+        });
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address() as { port: number };
+        resolve({ server, base: `http://127.0.0.1:${address.port}` });
+      });
+    });
+  }
+
+  beforeEach(async () => {
+    process.env.AI_PROVIDER = "live";
+    await getRepository().reset();
+    const repo = getRepository();
+    const manager = new ConnectorManager(repo);
+    await discoverAssets({ repo, manager });
+    await scanAsset({ repo, manager }, "ast-api-gateway-01", { trigger: "manual" });
+  });
+
+  afterEach(() => {
+    process.env.AI_PROVIDER = savedEnv.provider;
+    process.env.AI_SERVICE_URL = savedEnv.url;
+  });
+
+  async function ctx() {
+    const repo = getRepository();
+    const manager = new ConnectorManager(repo);
+    return { repo, manager };
+  }
+
+  async function tlsFinding() {
+    const c = await ctx();
+    const scan = (await c.repo.scansForAsset("ast-api-gateway-01"))[0];
+    return { c, finding: scan.findings.find((f) => f.controlId === "TLS-001")! };
+  }
+
+  it("applies live prose overrides onto the deterministic plan (source=ai, provider=live)", async () => {
+    let received: Record<string, unknown> | null = null;
+    const { server, base } = await startMockAi((body) => {
+      received = body as Record<string, unknown>;
+      return {
+        status: 200,
+        json: {
+          findingId: "f-hero",
+          summary: "Live summary for TLS-001 on API-GATEWAY-01.",
+          rootCause: "Live root cause grounded in supplied evidence.",
+          potentialImpact: "Live potential impact — never a confirmed compromise.",
+          changeRiskReason: "Classified HIGH — live enrichment.",
+          confidence: 0.88,
+        },
+      };
+    });
+    process.env.AI_SERVICE_URL = base;
+    try {
+      const { c, finding } = await tlsFinding();
+      const rem = await analyzeRemediationIntelligence(c, finding.id, actor());
+      expect(rem.intelligence!.source).toBe("ai");
+      expect(rem.intelligence!.provider).toBe("live");
+      expect(rem.intelligence!.summary).toBe("Live summary for TLS-001 on API-GATEWAY-01.");
+      expect(rem.intelligence!.rootCause).toBe("Live root cause grounded in supplied evidence.");
+      expect(rem.intelligence!.confidence).toBe(0.88);
+      expect(rem.intelligence!.requiresApproval).toBe(true);
+      expect(validateAiRemediationPlanShape(rem.intelligence).ok).toBe(true);
+
+      // §29: the system prompt safety contract is sent verbatim.
+      if (received == null) throw new Error("expected the live AI service to have been called");
+      const raw: Record<string, unknown> = received;
+      expect(String(raw["systemPrompt"])).toContain("You are a security remediation planning assistant");
+      expect(String(raw["systemPrompt"])).toContain("Never invent evidence");
+      // §3: structured context only — no hidden application state.
+      expect((raw["finding"] as Record<string, unknown>)["controlId"]).toBe("TLS-001");
+      expect(Array.isArray(raw["evidence"])).toBe(true);
+      const blast = (raw["riskContext"] as Record<string, unknown>)["blastRadius"];
+      expect(typeof blast === "object" && blast !== null).toBe(true);
+      const conn = raw["connector"];
+      if (conn) expect(Array.isArray((conn as Record<string, unknown>)["authorizedActions"])).toBe(true);
+    } finally {
+      await stopServer(server);
+    }
+  });
+
+  it("falls back to baseline guidance (provider=mock) when the live AI call fails", async () => {
+    const { server, base } = await startMockAi(() => ({ status: 503, json: {} }));
+    process.env.AI_SERVICE_URL = base;
+    try {
+      const { c, finding } = await tlsFinding();
+      const rem = await analyzeRemediationIntelligence(c, finding.id, actor());
+      expect(rem.intelligence!.source).toBe("deterministic");
+      expect(rem.intelligence!.provider).toBe("mock");
+      expect(rem.intelligence!.disclaimer).toContain(BASELINE_REMEDIATION_LABEL);
+      expect(rem.intelligence!.requiresApproval).toBe(true);
+      expect(validateAiRemediationPlanShape(rem.intelligence).ok).toBe(true);
+    } finally {
+      await stopServer(server);
+    }
   });
 });

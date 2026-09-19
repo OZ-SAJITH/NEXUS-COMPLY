@@ -42,7 +42,7 @@ Extend the enterprise closed-loop remediation workflow (plan → validate → hu
 - Loads the finding, its asset, and all assets; computes `FindingRiskContext` through the catalog (`buildFindingRiskContext`), so blast radius / exposure / impact are the exact PHASE 5 values.
 - Builds the plan deterministically, validates it, and **stores the intelligence inline on the `RemediationRecord`** (`record.intelligence`) plus an append-only `planVersions[]` snapshot (sliced to the latest 20).
 - **Versioning:** `version = max(prev intelligence.version, planVersions.length) + 1`; regenerating never overwrites history — each run appends a `RemediationPlanVersion` and bumps the record's intelligence.
-- **Provider mode:** only `AI_PROVIDER === "live"` attempts the live AI service (`POST {AI_SERVICE_URL}/api/ai/remediation-plan`, 6 s abort). Any failure or non-live mode falls back to the deterministic engine with `source: "deterministic"`, `provider: "mock"`, baseline disclaimer. Live output is used only for prose/overrides on top of the deterministic structure.
+- **Provider mode:** only `AI_PROVIDER === "live"` attempts the live AI worker — the endpoint is implemented in `apps/ai-service` (`routes/remediation_ai.py`, `schemas/remediation.py`, `interpreters/remediation_mock.py`; `POST {AI_SERVICE_URL}/api/ai/remediation-plan`, 6 s abort) with the same evidence-only pydantic contract and a prose-only `RemediationPlanResponse` (structure + approval stay backend-owned; any interpreter exception falls back to the deterministic mock planner). An **honesty guard** labels the plan by the provider that actually produced content: `provider` is `"live"` only when applied live prose enrichment exists (override fields), otherwise `"mock"` — a failed or absent live call is never logged as live. Any failure or non-live mode falls back to the deterministic engine with `source: "deterministic"`, `provider: "mock"`, baseline disclaimer. Live output is used only for prose/overrides on top of the deterministic structure.
 - **Audit:** logs `AI_REMEDIATION_INTELLIGENCE_GENERATED` (entityType `remediation`, `source: "ai"`, detail = intelligenceId/version/source/provider/requiresApproval) attributed to the SYSTEM_REVIEWER actor.
 - Returns the enriched `RemediationRecord` — the same record object the existing workflow UI already drives.
 
@@ -90,10 +90,11 @@ The record shape is unchanged from the existing `RemediationRecord`, so Validate
 
 ## 11. Test coverage — API
 
-`apps/api/test/ai-remediation.test.ts` (new, 19 tests):
+`apps/api/test/ai-remediation.test.ts` (new, 22 tests):
 
 - **Catalog units** — valid structural plan for TLS-001; `INSUFFICIENT_EVIDENCE` with no evidence; baseline disclaimer; `SET_TLS_MIN_VERSION` + `ENFORCE_STRONG_CIPHERS` actions; rollback `AVAILABLE`; malformed-plan rejection; `confidenceFromEvidence([]) === 0.3`; `EVIDENCE_GROUNDED` with verified evidence; deterministic `changeRiskFor`; `REVIEW_REQUIRED` without rollback.
 - **Service integration** (fresh repo + discover + scan `ast-api-gateway-01`) — enriched `RemediationRecord` (v1, requiresApproval, provider mock, source deterministic, version + plan version, approval `NONE`/execution `NOT_EXECUTED`); baseline disclaimer; rollback `AVAILABLE`; evidence non-empty with hash; version increments reusing the same record; status stays `PLANNED`; `AI_REMEDIATION_INTELLIGENCE_GENERATED` audit detail; `listFindingRemediations` returns the enriched record; service change risk matches the catalog calculation.
+- **Live-provider enrichment & honest fallback** (stubbed live worker via `node:http`) — a 200 response with prose overrides lands on the deterministic plan (`source=ai`, `provider=live`), the §29 system-prompt safety contract is sent verbatim, and the request context stays structured/evidence-only (no hidden application state); a failing call (503) falls back to `source=deterministic`/`provider=mock` with the baseline disclaimer. Both plans pass `validateAiRemediationPlanShape`.
 
 ## 12. Test coverage — Web
 
@@ -104,7 +105,7 @@ The record shape is unchanged from the existing `RemediationRecord`, so Validate
 
 - API `tsc -p tsconfig.json` clean; `npm run build --workspace=apps/api` clean.
 - Web `tsc` + `vite build` clean.
-- Full suites: **API 151/151 (13 files)**, **Web 44/44 (2 files)**.
+- Full suites: **API 153/153 (13 files)**, **Web 44/44 (2 files)**.
 
 ## 14. Live API verification (:4919)
 
@@ -122,6 +123,7 @@ Started via `npx tsx src/index.ts` (tsx is the supported runtime; the pre-existi
 2. **Test-side typing** — `heroFinding` widened to the full `AssetFinding`; blast fixtures completed to the required `FindingBlastRadius` (incl. `affectedServices`); evidence `evidenceType` moved to the `EvidenceType` union (`"TLS"`); audit sort uses `AuditEventRecord.at`; unused import removed (strict `noUnusedLocals`).
 3. **Web render probe** — the inline panel test originally failed because remediation cards render collapsed; the probe now expands the card (header toggle click) before asserting the panel text.
 4. **Stray debug artifact** — `zz-debug.test.ts` (used to prove the version bump) removed so the suite reflects the real 13 files / 151 tests.
+5. **Honesty guard + live worker endpoint** — a failed/absent live call could previously still report `provider: "live"` because the raw `overrides` where spread into the plan input; the generated plan now advertises `provider` by what actually produced content (only an applied live prose enrichment earns `"live"`, else `"mock"`), and live overrides are passed only via explicit `*Override` fields. The Python `apps/ai-service` now implements the `/api/ai/remediation-plan` worker (evidence-only pydantic contract, prose-only response, deterministic planner fallback on any exception).
 
 ## 16. What was NOT changed
 
@@ -150,4 +152,4 @@ Cross-phase tracker: PHASE 3 (rule engine) → PHASE 4 (governance) → PHASE 5 
 
 ## 20. Sign-off
 
-PHASE 6 is complete and committed. All objectives delivered: deterministic evidence-grounded intelligence engine with structural validator, inline storage + append-only plan versions, forced human approval, honest baseline labeling, live-provider fallback with prose-overrides only, 4 new API routes, full frontend panel + workflow integration, demo parity, 20 new API tests + Web parity/render probes, clean builds, full live smoke test of the new endpoints, and live verification recorded. No regressions; a debug artifact was removed and the totals reflect the true suite.
+PHASE 6 is complete and committed. All objectives delivered: deterministic evidence-grounded intelligence engine with structural validator, inline storage + append-only plan versions, forced human approval, honest baseline labeling, live-provider fallback with prose-overrides only (honesty guard keeps `provider` truthful, backed by the implemented `apps/ai-service` worker endpoint), 4 new API routes, full frontend panel + workflow integration, demo parity, 22 new API tests + Web parity/render probes, clean builds, full live smoke test of the new endpoints, and live verification recorded. No regressions; a debug artifact was removed and the totals reflect the true suite.

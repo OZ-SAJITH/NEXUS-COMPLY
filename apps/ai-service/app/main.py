@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import ai, governance_ai
+from app.routes import ai, governance_ai, remediation_ai
 
 app = FastAPI(title="NEXUS-COMPLY AI Service", version="1.0.0")
 
@@ -17,6 +17,7 @@ app.add_middleware(
 
 app.include_router(ai.router, prefix="/api")
 app.include_router(governance_ai.router, prefix="/api")
+app.include_router(remediation_ai.router, prefix="/api")
 
 
 @app.get("/health")

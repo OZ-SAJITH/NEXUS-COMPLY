@@ -560,6 +560,13 @@ export async function analyzeRemediationIntelligence(ctx: Instantiation, finding
     overrides = await tryLiveRemediation({ finding, asset, evidence, riskContext, connector, actionType });
   }
 
+  // Honesty guard: the plan reports the provider that ACTUALLY produced
+  // content. A failed/absent live call must never be logged as "live" —
+  // only an applied live prose enrichment earns that label, keeping
+  // `source` and `provider` consistent on the generated plan.
+  const hasLiveProse = Boolean(overrides && (overrides.summary || overrides.rootCause || overrides.potentialImpact));
+  const effectiveProvider: AiProviderMode = hasLiveProse ? "live" : "mock";
+
   const existing = (await ctx.repo.allRemediations())
     .filter((r) => r.findingId === findingId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -580,8 +587,16 @@ export async function analyzeRemediationIntelligence(ctx: Instantiation, finding
     id,
     version,
     createdBy: actor.name,
-    provider: providerMode,
-    ...(overrides ?? {}),
+    provider: effectiveProvider,
+    ...(overrides
+      ? {
+          summaryOverride: overrides.summary,
+          rootCauseOverride: overrides.rootCause,
+          potentialImpactOverride: overrides.potentialImpact,
+          changeRiskReasonOverride: overrides.changeRiskReason,
+          confidenceOverride: overrides.confidence,
+        }
+      : {}),
   };
 
   const intelligence = buildRemediationIntelligence(input);
