@@ -186,6 +186,59 @@ describe("PHASE 6 — deterministic remediation intelligence (catalog)", () => {
     expect(plan.confidence).toBeGreaterThan(0.65);
   });
 
+  it("DB-001 produces a structured database-encryption plan with no fabricated vendor commands", () => {
+    const dbAsset = toAssetRecord(
+      INVENTORY.find((a) => a.id === "ast-db-customer-core")!,
+      assetRelationships(),
+    );
+    const finding: AssetFinding = {
+      ...heroFinding(),
+      id: "f-db-001",
+      controlId: "DB-001",
+      controlName: "Database Encryption at Rest",
+      severity: "HIGH",
+      what: "Database encryption at rest is disabled",
+      why: "Observed encryption disabled where enabled is required",
+      observedValue: "disabled",
+      expectedValue: "enabled",
+      assetId: dbAsset.id,
+      assetType: "DATABASE",
+    };
+    const base = minimalInput();
+    const plan = buildRemediationIntelligence({
+      ...base,
+      finding,
+      asset: dbAsset,
+      actionType: "ENABLE_DB_ENCRYPTION",
+      riskContext: {
+        ...base.riskContext,
+        findingId: finding.id,
+        assetId: dbAsset.id,
+        assetName: dbAsset.name,
+        assetType: "DATABASE",
+        exposure: "INTERNAL",
+        impactScore: 11,
+        blastRadius: {
+          ...blastFixture(),
+          affectedAssetCount: 1,
+          affectedAssetIds: [dbAsset.id],
+          criticalAssetsAffected: 1,
+          affectedServices: ["Database"],
+        },
+      },
+    });
+    expect(validateAiRemediationPlanShape(plan).ok).toBe(true);
+    expect(plan.requiresApproval).toBe(true);
+    expect(plan.recommendedActions.map((a) => a.actionType)).toContain("ENABLE_DB_ENCRYPTION");
+    expect(plan.preChecks.length).toBeGreaterThan(0);
+    expect(plan.validationSteps.length).toBeGreaterThan(0);
+    expect(plan.rollbackSteps.length).toBeGreaterThan(0);
+    expect(plan.rollbackStatus).toBe("AVAILABLE");
+    for (const a of plan.recommendedActions) {
+      expect(a.action).not.toMatch(/\b(psql|ALTER\s+SYSTEM|aws\s+rds|kubectl|ssh)\b/i);
+    }
+  });
+
   it("change risk is deterministic across repeated calls", () => {
     const a = changeRiskFor({
       actionImpact: "MEDIUM",

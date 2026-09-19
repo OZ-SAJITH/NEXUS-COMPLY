@@ -53,10 +53,11 @@ try {
   t = await text();
   check(/observed/i.test(t) && /expected/i.test(t) && /recommended fix/i.test(t), "Detail — why-panel shows observed/expected/recommended fix", "");
 
-  const selects = await page.locator("select").count();
+  const lifecycleSelects = page.getByLabel(/lifecycle/i);
+  const selects = await lifecycleSelects.count();
   check(selects >= 1, "Detail — lifecycle selects present", `selects=${selects}`);
 
-  await page.locator("select").first().selectOption("ACKNOWLEDGED");
+  await lifecycleSelects.first().selectOption("ACKNOWLEDGED");
   await page.waitForTimeout(600);
   t = await text();
   check(/ACKNOWLEDGED/i.test(t), "Detail — lifecycle flipped to ACKNOWLEDGED", "");

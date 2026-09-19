@@ -298,7 +298,7 @@ export const INVENTORY: SimulatedAssetSeed[] = [
 //
 // A fresh install opens with the KNOWN_ESTATE (the footprint already being
 // managed). The first "Discover Assets" run creates exactly the DISCOVERY_WAVE
-// — 14 assets across Chennai, New York and Singapore — and subsequent runs are
+// — 15 assets across Chennai, New York and Singapore — and subsequent runs are
 // idempotent (0 new). This keeps the front-of-loop honest: discovery actually
 // discovers, instead of reporting "0 new" because the seed pre-created the
 // whole estate. The hero (API-GATEWAY-01) stays in the known estate so the

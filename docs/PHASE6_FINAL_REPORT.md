@@ -104,7 +104,7 @@ The record shape is unchanged from the existing `RemediationRecord`, so Validate
 
 - API `tsc -p tsconfig.json` clean; `npm run build --workspace=apps/api` clean.
 - Web `tsc` + `vite build` clean.
-- Full suites: **API 150/150 (13 files)**, **Web 44/44 (2 files)**.
+- Full suites: **API 151/151 (13 files)**, **Web 44/44 (2 files)**.
 
 ## 14. Live API verification (:4919)
 
@@ -121,7 +121,7 @@ Started via `npx tsx src/index.ts` (tsx is the supported runtime; the pre-existi
 1. **`validationStepsFor` blast field** — after a test exposed a crash risk on a missing `affectedServices`, the AFTER step prefers `affectedServices` and falls back to affected-asset count defensively.
 2. **Test-side typing** — `heroFinding` widened to the full `AssetFinding`; blast fixtures completed to the required `FindingBlastRadius` (incl. `affectedServices`); evidence `evidenceType` moved to the `EvidenceType` union (`"TLS"`); audit sort uses `AuditEventRecord.at`; unused import removed (strict `noUnusedLocals`).
 3. **Web render probe** — the inline panel test originally failed because remediation cards render collapsed; the probe now expands the card (header toggle click) before asserting the panel text.
-4. **Stray debug artifact** — `zz-debug.test.ts` (used to prove the version bump) removed so the suite reflects the real 13 files / 150 tests.
+4. **Stray debug artifact** — `zz-debug.test.ts` (used to prove the version bump) removed so the suite reflects the real 13 files / 151 tests.
 
 ## 16. What was NOT changed
 
@@ -142,10 +142,12 @@ Started via `npx tsx src/index.ts` (tsx is the supported runtime; the pre-existi
 
 `docs/DEMO_SCRIPT.md` now includes a **PHASE 6 — AI remediation intelligence (60s)** walkthrough (see below), covering generate → baseline-guidance label → approval gate → regeneration version bump.
 
+**Spec §30/§31 asset mapping.** The literal §30 prescription ("API-CHN-01, TLS-001, observed TLS 1.0") does not match the deterministic seed: `API-CHN-01` lives in the discovery wave (`catalog.ts:308-313`) and its seed is `tlsMinVersion:"1.2"` (`catalog.ts:221`), so TLS-001 *passes*. Per the spec's own "adapt names to the existing schema" and "do not break existing features" clauses, the demo uses the known-estate hero **API-GATEWAY-01** (`tlsMinVersion:"1.0"` → TLS-001 FAIL), kept in the known estate so the scan → remediate → verify loop is live on first paint (`catalog.ts:304-305`). The concept is identical (API asset, TLS-001, observed 1.0, expected 1.2+). Spec §31 (DB-001 database encryption) is covered by **DB-CUSTOMER-CORE** (`dbEncryption:false` → DB-001 FAIL, mapped to `ENABLE_DB_ENCRYPTION`); a catalog test now pins its structured plan.
+
 ## 19. Report (§37) — this document
 
 Cross-phase tracker: PHASE 3 (rule engine) → PHASE 4 (governance) → PHASE 5 (risk prioritization/impact) → PHASE 6 (AI remediation intelligence). Plans table updated in `NEXUS-COMPLY-UPGRADE-PLAN.md` under a new "### PHASE 6 — AI remediation intelligence engine (shipped)" section, including the live-probe results.
 
 ## 20. Sign-off
 
-PHASE 6 is complete and committed. All objectives delivered: deterministic evidence-grounded intelligence engine with structural validator, inline storage + append-only plan versions, forced human approval, honest baseline labeling, live-provider fallback with prose-overrides only, 4 new API routes, full frontend panel + workflow integration, demo parity, 19 new API tests + Web parity/render probes, clean builds, full live smoke test of the new endpoints, and live verification recorded. No regressions; a debug artifact was removed and the totals reflect the true suite.
+PHASE 6 is complete and committed. All objectives delivered: deterministic evidence-grounded intelligence engine with structural validator, inline storage + append-only plan versions, forced human approval, honest baseline labeling, live-provider fallback with prose-overrides only, 4 new API routes, full frontend panel + workflow integration, demo parity, 20 new API tests + Web parity/render probes, clean builds, full live smoke test of the new endpoints, and live verification recorded. No regressions; a debug artifact was removed and the totals reflect the true suite.

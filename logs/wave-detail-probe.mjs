@@ -26,17 +26,17 @@ try {
   await page.waitForSelector('button:has-text("Discover Assets")', { timeout: 20000 });
 
   await page.click('button:has-text("Discover Assets")');
-  await page.waitForFunction(() => document.body.innerText.includes("14 new assets discovered"), null, { timeout: 15000 });
+  await page.waitForFunction(() => document.body.innerText.includes("15 new assets discovered"), null, { timeout: 15000 });
   await page.waitForTimeout(600);
   let rows = await page.locator("table tbody tr").count();
-  ok(rows === 36, "first discovery — table has 36 rows", `rows=${rows}`);
+  ok(rows === 37, "first discovery — table has 37 rows", `rows=${rows}`);
 
   await page.click('button:has-text("Discover Assets")');
   await page.waitForFunction(() => document.body.innerText.includes("0 new assets discovered"), null, { timeout: 15000 });
   await page.waitForTimeout(600);
   const notice2 = await page.evaluate(() => document.body.innerText.match(/Discovery run [^\n]*/)?.[0] ?? "");
   rows = await page.locator("table tbody tr").count();
-  ok(rows === 36, "second discovery — idempotent, still 36 rows (no duplicates)", `rows=${rows}`);
+  ok(rows === 37, "second discovery — idempotent, still 37 rows (no duplicates)", `rows=${rows}`);
   ok(/0 new assets discovered/.test(notice2), "second discovery notice", notice2 || "no notice");
 
   await page.goto(BASE + "/app/enterprise/assets/ast-fw-sg-01", { waitUntil: "domcontentloaded", timeout: 30000 });
