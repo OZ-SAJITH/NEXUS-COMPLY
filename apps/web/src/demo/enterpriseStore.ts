@@ -311,7 +311,10 @@ function findFinding(state: Persisted, findingId: string): { asset: AssetRecord;
 
 function applyFindingLifecycle(state: Persisted, findingId: string, lifecycle: FindingLifecycle): AssetFinding {
   for (const a of state.assets) {
-    const scan = latestScan(state, a.id);
+    const scan = state.assetScans
+      .filter((s) => s.assetId === a.id)
+      .sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))
+      .find((s) => s.findings.some((f) => f.id === findingId));
     const f = scan?.findings.find((x) => x.id === findingId);
     if (f) {
       f.lifecycle = lifecycle;

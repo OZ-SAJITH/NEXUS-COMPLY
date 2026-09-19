@@ -375,4 +375,18 @@ describe("PHASE 6 — AI remediation intelligence demo mirror (backend parity)",
   it("404s the analyze route for an unknown finding", () => {
     expect(() => dispatchDemo("/api/findings/does-not-exist/remediation/analyze", { method: "POST" })).toThrowError(/not found/i);
   });
+
+  it("closed loop reaches VERIFIED even though the re-scan drops the resolved finding", () => {
+    const scan = enterpriseDemo.scan(hero, "manual");
+    const tls = scan.findings.find((f) => f.controlId === "TLS-001") ?? scan.findings[0];
+    const rem = enterpriseDemo.remediationIntelligence(tls.id);
+    expect(enterpriseDemo.validateRemediation(rem.id).status).toBe("VALIDATED");
+    expect(enterpriseDemo.requestApproval(rem.id).status).toBe("PENDING_APPROVAL");
+    expect(enterpriseDemo.approve(rem.id).status).toBe("APPROVED");
+    expect(enterpriseDemo.execute(rem.id).status).toBe("COMPLETED");
+    const verified = enterpriseDemo.verify(rem.id);
+    expect(verified.status).toBe("VERIFIED");
+    expect(verified.verification.status).toBe("PASS");
+    expect(verified.verification.triggeredBy).toBe("auto_verify_scan");
+  });
 });

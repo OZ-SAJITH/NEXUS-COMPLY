@@ -104,7 +104,7 @@ The record shape is unchanged from the existing `RemediationRecord`, so Validate
 
 - API `tsc -p tsconfig.json` clean; `npm run build --workspace=apps/api` clean.
 - Web `tsc` + `vite build` clean.
-- Full suites: **API 150/150 (13 files)**, **Web 43/43 (2 files)**.
+- Full suites: **API 150/150 (13 files)**, **Web 44/44 (2 files)**.
 
 ## 14. Live API verification (:4919)
 
